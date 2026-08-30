@@ -2,10 +2,12 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.model.DispenseRecord
 import com.example.data.model.InventoryItem
 import com.example.data.model.Patient
-import com.example.util.QrCodeUtil
 import com.example.ui.screens.MonthlyTrendData
+import com.example.util.ExportHelper
+import com.example.util.QrCodeUtil
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -13,6 +15,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -95,6 +98,36 @@ class ExampleRobolectricTest {
     assertEquals(2, flaggedAlerts.size)
     assertTrue(flaggedAlerts.any { it.patientId == "3" })
     assertTrue(flaggedAlerts.any { it.patientId == "4" })
+  }
+
+  @Test
+  fun `csv export generation verification`() {
+    val records = listOf(
+      DispenseRecord(
+        recordId = 1,
+        patientId = "METH-2026-0001",
+        patientName = "Ahmad Bin Razali",
+        patientIc = "850101-10-5432",
+        dispenseDate = "2026-08-30",
+        dispenseTime = "08:30:00",
+        doseMg = 60.0,
+        doseVolumeMl = 12.0,
+        dispenseType = "DOT",
+        officerName = "Jururawat Kanan (Farmasi)"
+      )
+    )
+
+    val csvOutput = ExportHelper.generateCsvContent(
+      records = records,
+      summary = null,
+      dateScope = "2026-08-30",
+      officerName = "Jururawat Kanan (Farmasi)"
+    )
+
+    assertTrue(csvOutput.contains("LAPORAN AUDIT DISPENSI & KEHADIRAN METHADONE"))
+    assertTrue(csvOutput.contains("Ahmad Bin Razali"))
+    assertTrue(csvOutput.contains("METH-2026-0001"))
+    assertTrue(csvOutput.contains("60.0"))
   }
 }
 

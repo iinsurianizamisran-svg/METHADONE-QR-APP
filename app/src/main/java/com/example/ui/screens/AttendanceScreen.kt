@@ -23,7 +23,9 @@ import androidx.compose.material.icons.filled.ArrowBackIosNew
 import androidx.compose.material.icons.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.LocalPharmacy
@@ -88,9 +90,23 @@ fun AttendanceScreen(
     val dateRecords by viewModel.dateRecords.collectAsStateWithLifecycle()
     val summary by viewModel.attendanceSummary.collectAsStateWithLifecycle()
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
+    val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
+    val activeOfficer by viewModel.activeOfficerName.collectAsStateWithLifecycle()
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("SEMUA") } // SEMUA, HADIR, BELUM_HADIR, DOT, TAKE_HOME
+    var showExportModal by remember { mutableStateOf(false) }
+
+    if (showExportModal) {
+        ExportModal(
+            selectedDate = selectedDate,
+            dateRecords = dateRecords,
+            allRecords = allRecords,
+            summary = summary,
+            officerName = activeOfficer,
+            onDismiss = { showExportModal = false }
+        )
+    }
 
     // Compute patient attendance states for the selected date
     val recordsByPatientId = remember(dateRecords) {
@@ -169,13 +185,28 @@ fun AttendanceScreen(
                         )
                     }
 
-                    IconButton(
-                        onClick = {
-                            val nextDate = changeDateByDays(selectedDate, 1)
-                            viewModel.setSelectedDate(nextDate)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = {
+                                val nextDate = changeDateByDays(selectedDate, 1)
+                                viewModel.setSelectedDate(nextDate)
+                            }
+                        ) {
+                            Icon(Icons.Default.ArrowForwardIos, contentDescription = "Esok", modifier = Modifier.size(18.dp))
                         }
-                    ) {
-                        Icon(Icons.Default.ArrowForwardIos, contentDescription = "Esok", modifier = Modifier.size(18.dp))
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        IconButton(
+                            onClick = { showExportModal = true },
+                            modifier = Modifier.testTag("attendance_export_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FileDownload,
+                                contentDescription = "Eksport Laporan",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }
