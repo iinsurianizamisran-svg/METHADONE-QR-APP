@@ -5,10 +5,13 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.data.model.ClinicSettings
 import com.example.data.model.DispenseRecord
 import com.example.data.model.InventoryItem
 import com.example.data.model.InventoryLog
 import com.example.data.model.Patient
+import com.example.data.model.User
+import com.example.data.model.UserRoles
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -17,8 +20,8 @@ import java.util.Date
 import java.util.Locale
 
 @Database(
-    entities = [Patient::class, DispenseRecord::class, InventoryItem::class, InventoryLog::class],
-    version = 2,
+    entities = [Patient::class, DispenseRecord::class, InventoryItem::class, InventoryLog::class, User::class, ClinicSettings::class],
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -26,6 +29,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun patientDao(): PatientDao
     abstract fun dispenseDao(): DispenseDao
     abstract fun inventoryDao(): InventoryDao
+    abstract fun userDao(): UserDao
+    abstract fun clinicSettingsDao(): ClinicSettingsDao
 
     companion object {
         @Volatile
@@ -51,7 +56,13 @@ abstract class AppDatabase : RoomDatabase() {
                 super.onCreate(db)
                 INSTANCE?.let { database ->
                     CoroutineScope(Dispatchers.IO).launch {
-                        populateInitialData(database.patientDao(), database.dispenseDao(), database.inventoryDao())
+                        populateInitialData(
+                            database.patientDao(),
+                            database.dispenseDao(),
+                            database.inventoryDao(),
+                            database.userDao(),
+                            database.clinicSettingsDao()
+                        )
                     }
                 }
             }
@@ -60,9 +71,71 @@ abstract class AppDatabase : RoomDatabase() {
         private suspend fun populateInitialData(
             patientDao: PatientDao,
             dispenseDao: DispenseDao,
-            inventoryDao: InventoryDao
+            inventoryDao: InventoryDao,
+            userDao: UserDao,
+            clinicSettingsDao: ClinicSettingsDao
         ) {
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+
+            // Seed initial Clinic Settings
+            clinicSettingsDao.saveClinicSettings(
+                ClinicSettings(
+                    id = 1,
+                    clinicName = "e-Methadone PKD Kluang",
+                    isSetupCompleted = false,
+                    activePatientsCount = 45,
+                    newCasesCount = 5,
+                    defaultersCount = 2,
+                    restartCount = 1,
+                    transferInCount = 3,
+                    transferOutCount = 1,
+                    deathCount = 0,
+                    terminatedCount = 1,
+                    autoBackupPath = "/sdcard/eMethadone_Backup"
+                )
+            )
+
+            // Seed default staff user accounts
+            val defaultUsers = listOf(
+                User(
+                    username = "admin",
+                    passwordHash = "admin",
+                    fullName = "Pentadbir Utama Sistem",
+                    role = UserRoles.ADMIN,
+                    icOrStaffId = "ADMIN-001",
+                    email = "admin@kkcheras.gov.my",
+                    createdDate = today
+                ),
+                User(
+                    username = "farmasi",
+                    passwordHash = "farmasi123",
+                    fullName = "Petugas Farmasi Azman bin Daud",
+                    role = UserRoles.PHARMACY,
+                    icOrStaffId = "FAR-88102",
+                    email = "azman.pharmacy@kkcheras.gov.my",
+                    createdDate = today
+                ),
+                User(
+                    username = "doktor",
+                    passwordHash = "doktor123",
+                    fullName = "Dr. Farah Hanim (FMS)",
+                    role = UserRoles.DOCTOR,
+                    icOrStaffId = "DOC-77201",
+                    email = "drfarah@kkcheras.gov.my",
+                    createdDate = today
+                ),
+                User(
+                    username = "amo",
+                    passwordHash = "amo123",
+                    fullName = "PPP Hafiz (AMO Kanan)",
+                    role = UserRoles.AMO,
+                    icOrStaffId = "AMO-90112",
+                    email = "hafiz.amo@kkcheras.gov.my",
+                    createdDate = today
+                )
+            )
+
+            userDao.insertUsers(defaultUsers)
 
             val samplePatients = listOf(
                 Patient(

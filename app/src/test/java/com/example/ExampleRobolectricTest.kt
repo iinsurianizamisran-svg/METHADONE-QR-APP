@@ -2,12 +2,15 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.model.ClinicSettings
 import com.example.data.model.DispenseRecord
 import com.example.data.model.InventoryItem
 import com.example.data.model.Patient
 import com.example.ui.screens.MonthlyTrendData
 import com.example.util.ExportHelper
 import com.example.util.QrCodeUtil
+import com.example.data.model.User
+import com.example.data.model.UserRoles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -20,6 +23,49 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class ExampleRobolectricTest {
+
+  @Test
+  fun `clinic settings model and net active calculation`() {
+    val settings = ClinicSettings(
+      clinicName = "e-Methadone PKD Kluang",
+      isSetupCompleted = true,
+      activePatientsCount = 45,
+      newCasesCount = 5,
+      defaultersCount = 2,
+      restartCount = 1,
+      transferInCount = 3,
+      transferOutCount = 1,
+      deathCount = 0,
+      terminatedCount = 1,
+      autoBackupPath = "/sdcard/eMethadone_Backup"
+    )
+
+    val netActive = (settings.activePatientsCount + settings.newCasesCount + settings.transferInCount + settings.restartCount) -
+            (settings.defaultersCount + settings.transferOutCount + settings.deathCount + settings.terminatedCount)
+
+    assertEquals("e-Methadone PKD Kluang", settings.clinicName)
+    assertTrue(settings.isSetupCompleted)
+    assertEquals(50, netActive)
+  }
+
+  @Test
+  fun `user model role and credentials verification`() {
+    val adminUser = User(
+      username = "admin",
+      passwordHash = "admin",
+      fullName = "Pentadbir Utama Sistem",
+      role = UserRoles.ADMIN,
+      icOrStaffId = "ADMIN-001",
+      createdDate = "2026-08-30"
+    )
+
+    assertEquals("admin", adminUser.username)
+    assertEquals("admin", adminUser.passwordHash)
+    assertEquals("Pentadbir", adminUser.role)
+    assertTrue(UserRoles.ALL_ROLES.contains(UserRoles.PHARMACY))
+    assertTrue(UserRoles.ALL_ROLES.contains(UserRoles.DOCTOR))
+    assertTrue(UserRoles.ALL_ROLES.contains(UserRoles.AMO))
+  }
 
   @Test
   fun `read string from context`() {
@@ -88,10 +134,10 @@ class ExampleRobolectricTest {
   @Test
   fun `missed dose alert threshold filtering`() {
     val patients = listOf(
-      Patient(patientId = "1", name = "Pesakit Normal", missedDaysStreak = 0, icNumber = "111111-11-1111"),
-      Patient(patientId = "2", name = "Cicir 2 Hari", missedDaysStreak = 2, icNumber = "222222-22-2222"),
-      Patient(patientId = "3", name = "Cicir 4 Hari Alert", missedDaysStreak = 4, icNumber = "333333-33-3333"),
-      Patient(patientId = "4", name = "Cicir 5 Hari Alert", missedDaysStreak = 5, icNumber = "444444-44-4444")
+      Patient(patientId = "1", name = "Pesakit Normal", missedDaysStreak = 0, icNumber = "111111-11-1111", currentDoseMg = 60.0, doseVolumeMl = 12.0, registrationDate = "2026-08-01"),
+      Patient(patientId = "2", name = "Cicir 2 Hari", missedDaysStreak = 2, icNumber = "222222-22-2222", currentDoseMg = 60.0, doseVolumeMl = 12.0, registrationDate = "2026-08-01"),
+      Patient(patientId = "3", name = "Cicir 4 Hari Alert", missedDaysStreak = 4, icNumber = "333333-33-3333", currentDoseMg = 60.0, doseVolumeMl = 12.0, registrationDate = "2026-08-01"),
+      Patient(patientId = "4", name = "Cicir 5 Hari Alert", missedDaysStreak = 5, icNumber = "444444-44-4444", currentDoseMg = 60.0, doseVolumeMl = 12.0, registrationDate = "2026-08-01")
     )
 
     val flaggedAlerts = patients.filter { it.status == "AKTIF" && it.missedDaysStreak > 3 }

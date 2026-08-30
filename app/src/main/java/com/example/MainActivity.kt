@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -67,6 +68,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Settings
+import com.example.ui.screens.ClinicSetupScreen
+import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.MissedDoseAlertBanner
 import com.example.ui.screens.MissedDoseNotificationModal
 import com.example.data.model.Patient
@@ -100,7 +105,30 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                MainAppScreen(viewModel = viewModel)
+                val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
+                val clinicSettings by viewModel.clinicSettings.collectAsStateWithLifecycle()
+                var forceShowSetup by remember { mutableStateOf(false) }
+
+                if (!isLoggedIn) {
+                    LoginScreen(
+                        viewModel = viewModel,
+                        onLoginSuccess = {
+                            // Check if setup completed
+                        }
+                    )
+                } else if (clinicSettings?.isSetupCompleted == false || forceShowSetup) {
+                    ClinicSetupScreen(
+                        viewModel = viewModel,
+                        onSetupComplete = {
+                            forceShowSetup = false
+                        }
+                    )
+                } else {
+                    MainAppScreen(
+                        viewModel = viewModel,
+                        onOpenSetup = { forceShowSetup = true }
+                    )
+                }
             }
         }
     }
@@ -108,7 +136,10 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainAppScreen(viewModel: MethadoneViewModel) {
+fun MainAppScreen(
+    viewModel: MethadoneViewModel,
+    onOpenSetup: () -> Unit = {}
+) {
     var currentTab by remember { mutableStateOf(MainNavigationTab.SCAN) }
     var selectedPatientForDetail by remember { mutableStateOf<Patient?>(null) }
     var showOfficerDialog by remember { mutableStateOf(false) }
@@ -118,6 +149,9 @@ fun MainAppScreen(viewModel: MethadoneViewModel) {
     val summary by viewModel.attendanceSummary.collectAsStateWithLifecycle()
     val isLowStockAlert by viewModel.isLowStockAlert.collectAsStateWithLifecycle()
     val missedDoseAlerts by viewModel.missedDoseAlerts.collectAsStateWithLifecycle()
+    val clinicSettings by viewModel.clinicSettings.collectAsStateWithLifecycle()
+
+    val clinicDisplayName = clinicSettings?.clinicName ?: "e-Methadone PKD Kluang"
 
     Scaffold(
         topBar = {
@@ -147,7 +181,7 @@ fun MainAppScreen(viewModel: MethadoneViewModel) {
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Klinik Kesihatan Cheras (MMT)",
+                                text = clinicDisplayName,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.SemiBold
@@ -156,6 +190,17 @@ fun MainAppScreen(viewModel: MethadoneViewModel) {
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = onOpenSetup,
+                        modifier = Modifier.testTag("clinic_setup_settings_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Tetapan Klinik",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
                     IconButton(
                         onClick = { showMissedDoseModal = true },
                         modifier = Modifier.testTag("notification_center_button")
@@ -355,6 +400,10 @@ fun MainAppScreen(viewModel: MethadoneViewModel) {
                 onSelectOfficer = { newOfficer ->
                     viewModel.updateOfficerName(newOfficer)
                     showOfficerDialog = false
+                },
+                onLogout = {
+                    showOfficerDialog = false
+                    viewModel.logout()
                 }
             )
         }
@@ -365,7 +414,8 @@ fun MainAppScreen(viewModel: MethadoneViewModel) {
 fun OfficerSwitcherDialog(
     currentOfficer: String,
     onDismiss: () -> Unit,
-    onSelectOfficer: (String) -> Unit
+    onSelectOfficer: (String) -> Unit,
+    onLogout: () -> Unit
 ) {
     val officersList = listOf(
         "Jururawat Kanan Siti (Farmasi MMT)",
@@ -380,16 +430,37 @@ fun OfficerSwitcherDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = "Pilih / Tukar Petugas Bertugas",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Profil / Tukar Petugas",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                TextButton(
+                    onClick = onLogout,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Log Keluar", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Nama petugas akan direkodkan dalam setiap transaksi pengeluaran methadone:",
+                    text = "Petugas Aktif: $currentOfficer",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Text(
+                    text = "Pilih nama petugas bertugas untuk rekod dispensasi:",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline
                 )

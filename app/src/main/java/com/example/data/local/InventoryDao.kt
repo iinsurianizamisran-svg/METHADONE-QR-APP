@@ -28,4 +28,7 @@ interface InventoryDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertInventoryLog(log: InventoryLog)
+
+    @Query("DELETE FROM inventory_logs WHERE id = :logId")
+    suspend fun deleteInventoryLog(logId: Long)
 }

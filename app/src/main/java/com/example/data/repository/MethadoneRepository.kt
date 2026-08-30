@@ -1,23 +1,89 @@
 package com.example.data.repository
 
+import com.example.data.local.ClinicSettingsDao
 import com.example.data.local.DispenseDao
 import com.example.data.local.InventoryDao
 import com.example.data.local.PatientDao
+import com.example.data.local.UserDao
+import com.example.data.model.ClinicSettings
 import com.example.data.model.DispenseRecord
 import com.example.data.model.InventoryItem
 import com.example.data.model.InventoryLog
 import com.example.data.model.Patient
+import com.example.data.model.User
 import kotlinx.coroutines.flow.Flow
 
 class MethadoneRepository(
     private val patientDao: PatientDao,
     private val dispenseDao: DispenseDao,
-    private val inventoryDao: InventoryDao
+    private val inventoryDao: InventoryDao,
+    private val userDao: UserDao,
+    private val clinicSettingsDao: ClinicSettingsDao
 ) {
     val allPatients: Flow<List<Patient>> = patientDao.getAllPatientsFlow()
     val allDispenseRecords: Flow<List<DispenseRecord>> = dispenseDao.getAllRecordsFlow()
     val inventoryItem: Flow<InventoryItem?> = inventoryDao.getInventoryFlow()
     val inventoryLogs: Flow<List<InventoryLog>> = inventoryDao.getAllInventoryLogsFlow()
+    val allUsers: Flow<List<User>> = userDao.getAllUsers()
+    val clinicSettings: Flow<ClinicSettings?> = clinicSettingsDao.getClinicSettingsFlow()
+
+    suspend fun getClinicSettings(): ClinicSettings? {
+        return clinicSettingsDao.getClinicSettings()
+    }
+
+    suspend fun saveClinicSettings(settings: ClinicSettings) {
+        clinicSettingsDao.saveClinicSettings(settings)
+        if (settings.isSetupCompleted) {
+            val stockMl = (settings.initialStockLiters * 1000.0).coerceAtLeast(100.0)
+            val currentInv = inventoryDao.getInventory() ?: InventoryItem()
+            val updatedInv = currentInv.copy(
+                medicationName = "Methadone Oral Concentrate ${settings.initialStrength}",
+                currentStockMl = stockMl,
+                lastRestockMl = stockMl,
+                batchNumber = settings.initialBatchNumber.ifBlank { currentInv.batchNumber },
+                expiryDate = settings.initialExpiryDate.ifBlank { currentInv.expiryDate },
+                lastUpdatedTimestamp = System.currentTimeMillis()
+            )
+            inventoryDao.insertOrUpdateInventory(updatedInv)
+
+            val log = InventoryLog(
+                date = SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date()),
+                time = SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date()),
+                actionType = "TAMBAH_STOK",
+                volumeChangeMl = stockMl,
+                remainingStockMl = stockMl,
+                batchNumber = settings.initialBatchNumber,
+                officerName = "Pentadbir Klinik",
+                notes = "Tetapan Permulaan Stok Klinik: ${settings.initialStockLiters} L (${stockMl.toInt()} mL), Batch: ${settings.initialBatchNumber}, Expiry: ${settings.initialExpiryDate}, Kekuatan: ${settings.initialStrength}",
+                timestamp = System.currentTimeMillis()
+            )
+            inventoryDao.insertInventoryLog(log)
+        }
+    }
+
+    suspend fun deleteInventoryLog(logId: Long) {
+        inventoryDao.deleteInventoryLog(logId)
+    }
+
+    suspend fun getUserByUsername(username: String): User? {
+        return userDao.getUserByUsername(username)
+    }
+
+    suspend fun getUserByIcOrStaffId(icOrStaffId: String): User? {
+        return userDao.getUserByIcOrStaffId(icOrStaffId)
+    }
+
+    suspend fun findUserForRecovery(username: String, icOrStaffId: String): User? {
+        return userDao.findUserForRecovery(username, icOrStaffId)
+    }
+
+    suspend fun insertUser(user: User) {
+        userDao.insertUser(user)
+    }
+
+    suspend fun updatePassword(username: String, newPassword: String) {
+        userDao.updatePassword(username, newPassword)
+    }
 
     fun searchPatients(query: String): Flow<List<Patient>> {
         return if (query.isBlank()) {

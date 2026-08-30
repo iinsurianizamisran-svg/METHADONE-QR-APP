@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocalHospital
@@ -83,10 +84,12 @@ fun InventoryScreen(
     val inventoryItem by viewModel.inventoryItem.collectAsStateWithLifecycle()
     val inventoryLogs by viewModel.inventoryLogs.collectAsStateWithLifecycle()
     val isLowStock by viewModel.isLowStockAlert.collectAsStateWithLifecycle()
+    val attendanceSummary by viewModel.attendanceSummary.collectAsStateWithLifecycle()
 
     var showRestockDialog by remember { mutableStateOf(false) }
     var showThresholdDialog by remember { mutableStateOf(false) }
     var showAdjustmentDialog by remember { mutableStateOf(false) }
+    var logToDelete by remember { mutableStateOf<InventoryLog?>(null) }
 
     LazyColumn(
         modifier = modifier
@@ -128,12 +131,12 @@ fun InventoryScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Pengurusan Inventori Metadon",
+                                text = "Dashboard Khas Stok & Inventori",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Pemantauan Bekalan & Amaran Stok Rendah",
+                                text = "Pengiraan Pengeluaran Harian & Pelarasan Stok",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
@@ -149,6 +152,114 @@ fun InventoryScreen(
                             contentDescription = "Tetapkan Had Amaran",
                             tint = MaterialTheme.colorScheme.primary
                         )
+                    }
+                }
+            }
+        }
+
+        // Daily Outflow & Outflow Calculation Dashboard Card
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.WaterDrop,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Pengiraan Harian Pengeluaran Ubatan",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            text = "Hari Ini",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Total Volume Dispensed Card
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "JUMLAH PENGELUARAN",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${String.format(Locale.US, "%.1f", attendanceSummary.totalMlDispensed)} mL",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "(${String.format(Locale.US, "%.3f", attendanceSummary.totalMlDispensed / 1000.0)} Liter)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+
+                        // Total Dose Mg Dispensed Card
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "KEKUATAN DOS (MG)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${attendanceSummary.totalMgDispensed.toInt()} mg",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                                Text(
+                                    text = "${attendanceSummary.attendedCount} Transaksi Pesakit",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -475,9 +586,38 @@ fun InventoryScreen(
             }
         } else {
             items(inventoryLogs, key = { it.id }) { log ->
-                InventoryLogItemCard(log = log, modifier = Modifier.fillMaxWidth())
+                InventoryLogItemCard(
+                    log = log,
+                    onDelete = { logToDelete = log },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
+    }
+
+    // Dialog: Delete Inventory Log Confirmation
+    logToDelete?.let { log ->
+        AlertDialog(
+            onDismissRequest = { logToDelete = null },
+            title = { Text("Hapus Log Inventori", fontWeight = FontWeight.Bold) },
+            text = { Text("Adakah anda pasti mahu menghapuskan log inventori ini?\n\n'${log.notes}'") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteInventoryLog(log.id)
+                        logToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = StatusRed)
+                ) {
+                    Text("Hapus Log")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { logToDelete = null }) {
+                    Text("Batal")
+                }
+            }
+        )
     }
 
     // Dialog: Configure Reorder Threshold
@@ -521,6 +661,7 @@ fun InventoryScreen(
 @Composable
 fun InventoryLogItemCard(
     log: InventoryLog,
+    onDelete: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -569,8 +710,19 @@ fun InventoryLogItemCard(
                         text = log.notes,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
                     )
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Hapus Log",
+                            tint = MaterialTheme.colorScheme.outline
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(2.dp))
@@ -880,10 +1032,47 @@ fun AdjustStockDialog(
                         .testTag("adjust_stock_input")
                 )
 
+                Text(
+                    text = "Pilih / Masukkan Sebab Pelarasan (Wajib):",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                val quickReasons = listOf(
+                    "Tumpah / Spilled",
+                    "Botol Pecah",
+                    "Ujian Sampel QC",
+                    "Kekurangan Audit Fizikal"
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    quickReasons.chunked(2).forEach { rowReasons ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            rowReasons.forEach { r ->
+                                OutlinedButton(
+                                    onClick = { reason = r },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (reason == r) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = r,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (reason == r) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = reason,
                     onValueChange = { reason = it },
-                    label = { Text("Sebab Pelarasan (Wajib)*") },
+                    label = { Text("Sebab Pelarasan (Alasan / Catatan)*") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("adjust_reason_input")

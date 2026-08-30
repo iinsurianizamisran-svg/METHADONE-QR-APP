@@ -14,7 +14,9 @@ import android.net.Uri
 import android.os.Build
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.example.data.model.ClinicSettings
 import com.example.data.model.DispenseRecord
+import com.example.data.model.Patient
 import com.example.ui.viewmodel.AttendanceSummary
 import java.io.File
 import java.io.FileOutputStream
@@ -23,6 +25,177 @@ import java.util.Date
 import java.util.Locale
 
 object ExportHelper {
+
+    /**
+     * Generates NDMA Monthly Report in CSV format.
+     */
+    fun generateNkmaReportCsv(
+        settings: ClinicSettings,
+        monthYear: String,
+        dispenseRecords: List<DispenseRecord>,
+        patientList: List<Patient>
+    ): String {
+        val sb = StringBuilder()
+        sb.append("\uFEFF") // UTF-8 BOM
+
+        sb.appendLine("# LAPORAN BULANAN NDMA (National Drugs Malaysia Association) - PROGRAM RAWATAN METHADONE (MMT)")
+        sb.appendLine("# Nama Klinik / PKD: ${settings.clinicName}")
+        sb.appendLine("# Bulan Laporan: $monthYear")
+        sb.appendLine("# Tarikh Dijana: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
+        sb.appendLine("#")
+
+        sb.appendLine("Kategori METRIK NDMA,Jumlah (Pesakit)")
+        sb.appendLine("Klinik / PKD,${escapeCsv(settings.clinicName)}")
+        sb.appendLine("Pesakit Aktif Semasa (Current Total Active),${settings.activePatientsCount}")
+        sb.appendLine("Kes Baharu Didaftar (New Case Register),${settings.newCasesCount}")
+        sb.appendLine("Cicir Rawatan (Defaulter),${settings.defaultersCount}")
+        sb.appendLine("Sambung Rawatan (Restart),${settings.restartCount}")
+        sb.appendLine("Pindah Masuk (Transfer-In),${settings.transferInCount}")
+        sb.appendLine("Pindah Keluar (Transfer-Out),${settings.transferOutCount}")
+        sb.appendLine("Kematian (Death),${settings.deathCount}")
+        sb.appendLine("Tamat Rawatan (Terminated),${settings.terminatedCount}")
+
+        val netActive = (settings.activePatientsCount + settings.newCasesCount + settings.transferInCount + settings.restartCount) -
+                (settings.defaultersCount + settings.transferOutCount + settings.deathCount + settings.terminatedCount)
+        sb.appendLine("ANGGARAN PESAKIT AKTIF AKHIR BULAN,${netActive}")
+        sb.appendLine("#")
+
+        sb.appendLine("REKOD DISPENSI METHADONE BULANAN")
+        sb.appendLine("No,ID Pesakit,Nama Pesakit,No. K/P,Tarikh,Masa,Dos (mg),Isipadu (mL),Jenis,Petugas")
+        dispenseRecords.forEachIndexed { idx, r ->
+            val row = listOf(
+                (idx + 1).toString(),
+                escapeCsv(r.patientId),
+                escapeCsv(r.patientName),
+                escapeCsv(r.patientIc),
+                escapeCsv(r.dispenseDate),
+                escapeCsv(r.dispenseTime),
+                r.doseMg.toString(),
+                r.doseVolumeMl.toString(),
+                escapeCsv(r.dispenseType),
+                escapeCsv(r.officerName)
+            )
+            sb.appendLine(row.joinToString(","))
+        }
+
+        return sb.toString()
+    }
+
+    /**
+     * Generates NDMA Monthly PDF Document.
+     */
+    fun generateNkmaReportPdf(
+        context: Context,
+        settings: ClinicSettings,
+        monthYear: String,
+        dispenseRecords: List<DispenseRecord>
+    ): File {
+        val pdfDocument = PdfDocument()
+        val pageWidth = 595 // A4 width in points
+        val pageHeight = 842 // A4 height
+
+        val pageNumber = 1
+        val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        val page = pdfDocument.startPage(pageInfo)
+        val canvas = page.canvas
+
+        val titlePaint = Paint().apply {
+            color = Color.rgb(15, 23, 42)
+            textSize = 15f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val subtitlePaint = Paint().apply {
+            color = Color.rgb(71, 85, 105)
+            textSize = 9.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        }
+        val sectionPaint = Paint().apply {
+            color = Color.rgb(30, 58, 138)
+            textSize = 11f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val headerTextPaint = Paint().apply {
+            color = Color.rgb(15, 23, 42)
+            textSize = 9f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val bodyPaint = Paint().apply {
+            color = Color.rgb(51, 65, 85)
+            textSize = 8.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        }
+
+        val bgPaint = Paint().apply { color = Color.rgb(241, 245, 249) }
+        canvas.drawRect(20f, 20f, pageWidth - 20f, 85f, bgPaint)
+
+        canvas.drawText("KEMENTERIAN KESIHATAN MALAYSIA (KKM)", 30f, 40f, titlePaint)
+        canvas.drawText("LAPORAN BULANAN NDMA (National Drugs Malaysia Association)", 30f, 56f, sectionPaint)
+        canvas.drawText("Klinik / PKD: ${settings.clinicName} | Laporan: $monthYear", 30f, 72f, subtitlePaint)
+
+        var currentY = 105f
+        canvas.drawText("RINGKASAN METRIK BULANAN NDMA", 20f, currentY, sectionPaint)
+        currentY += 15f
+
+        val nkmaMetrics = listOf(
+            "1. Current Total Active Patient (Pesakit Aktif Semasa)" to settings.activePatientsCount.toString(),
+            "2. New Case Register (Kes Baharu Didaftar)" to settings.newCasesCount.toString(),
+            "3. Defaulter (Cicir Rawatan)" to settings.defaultersCount.toString(),
+            "4. Restart (Sambung Rawatan Semula)" to settings.restartCount.toString(),
+            "5. Transfer-In (Pindah Masuk)" to settings.transferInCount.toString(),
+            "6. Transfer-Out (Pindah Keluar)" to settings.transferOutCount.toString(),
+            "7. Death (Kematian)" to settings.deathCount.toString(),
+            "8. Terminated (Tamat Rawatan)" to settings.terminatedCount.toString()
+        )
+
+        val netActive = (settings.activePatientsCount + settings.newCasesCount + settings.transferInCount + settings.restartCount) -
+                (settings.defaultersCount + settings.transferOutCount + settings.deathCount + settings.terminatedCount)
+
+        val gridPaint = Paint().apply {
+            color = Color.rgb(226, 232, 240)
+            strokeWidth = 0.5f
+        }
+
+        nkmaMetrics.forEachIndexed { i, (label, valStr) ->
+            val bg = if (i % 2 == 0) Color.rgb(248, 250, 252) else Color.WHITE
+            val p = Paint().apply { color = bg }
+            canvas.drawRect(20f, currentY, pageWidth - 20f, currentY + 18f, p)
+            canvas.drawLine(20f, currentY + 18f, pageWidth - 20f, currentY + 18f, gridPaint)
+
+            canvas.drawText(label, 30f, currentY + 13f, bodyPaint)
+            canvas.drawText(valStr, 480f, currentY + 13f, headerTextPaint)
+            currentY += 18f
+        }
+
+        // Net Total Row
+        val totalBg = Paint().apply { color = Color.rgb(224, 231, 255) }
+        canvas.drawRect(20f, currentY, pageWidth - 20f, currentY + 22f, totalBg)
+        canvas.drawText("JUMLAH PESAKIT AKTIF AKHIR BULAN (NET ACTIVE)", 30f, currentY + 15f, headerTextPaint)
+        canvas.drawText("$netActive Orang", 480f, currentY + 15f, headerTextPaint)
+        currentY += 35f
+
+        val stampBorderPaint = Paint().apply {
+            color = Color.rgb(148, 163, 184)
+            style = Paint.Style.STROKE
+            strokeWidth = 0.8f
+        }
+        canvas.drawRect(340f, currentY, pageWidth - 20f, currentY + 65f, stampBorderPaint)
+        canvas.drawText("PENGESAHAN PEGAWAI FARMASI / KETAKA", 350f, currentY + 16f, headerTextPaint)
+        canvas.drawText("Nama Pegawai: ___________________________", 350f, currentY + 34f, bodyPaint)
+        canvas.drawText("Tandatangan & Cop: ______________________", 350f, currentY + 50f, bodyPaint)
+
+        pdfDocument.finishPage(page)
+
+        val fileName = "Laporan_NKMA_${settings.clinicName.replace(" ", "_")}_${monthYear.replace(" ", "_")}_${System.currentTimeMillis()}.pdf"
+        val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
+        val file = File(exportDir, fileName)
+
+        FileOutputStream(file).use { out ->
+            pdfDocument.writeTo(out)
+        }
+        pdfDocument.close()
+
+        return file
+    }
 
     /**
      * Generates CSV formatted text content with UTF-8 BOM for Microsoft Excel compatibility.

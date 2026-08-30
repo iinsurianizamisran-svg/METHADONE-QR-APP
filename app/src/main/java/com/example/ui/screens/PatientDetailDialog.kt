@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocalPharmacy
@@ -144,7 +145,7 @@ fun PatientDetailDialog(
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    text = { Text("Ubah Dos") },
+                    text = { Text("Kemas Kini Pesakit") },
                     icon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
             }
@@ -166,15 +167,24 @@ fun PatientDetailDialog(
 
                 1 -> {
                     // History Log tab
-                    PatientHistoryView(records = patientRecords)
+                    PatientHistoryView(
+                        records = patientRecords,
+                        onDeleteRecord = { record ->
+                            viewModel.deleteRecord(record)
+                        }
+                    )
                 }
 
                 2 -> {
-                    // Update Dose tab
+                    // Update Patient & Status tab
                     EditDoseView(
                         patient = patient,
                         onSave = { updatedPatient ->
                             viewModel.updatePatient(updatedPatient)
+                            onDismiss()
+                        },
+                        onDeletePatient = {
+                            viewModel.deletePatient(patient)
                             onDismiss()
                         }
                     )
@@ -353,7 +363,10 @@ fun DigitalIdCardView(
 }
 
 @Composable
-fun PatientHistoryView(records: List<DispenseRecord>) {
+fun PatientHistoryView(
+    records: List<DispenseRecord>,
+    onDeleteRecord: (DispenseRecord) -> Unit = {}
+) {
     if (records.isEmpty()) {
         Box(
             modifier = Modifier
@@ -383,7 +396,8 @@ fun PatientHistoryView(records: List<DispenseRecord>) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = "${record.dispenseDate} • ${record.dispenseTime}",
@@ -391,11 +405,25 @@ fun PatientHistoryView(records: List<DispenseRecord>) {
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
                             )
-                            Text(
-                                text = "${record.doseMg.toInt()} mg (${record.doseVolumeMl} mL)",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "${record.doseMg.toInt()} mg (${record.doseVolumeMl} mL)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                IconButton(
+                                    onClick = { onDeleteRecord(record) },
+                                    modifier = Modifier.size(22.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Hapus Rekod",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
@@ -417,18 +445,76 @@ fun PatientHistoryView(records: List<DispenseRecord>) {
 @Composable
 fun EditDoseView(
     patient: Patient,
-    onSave: (Patient) -> Unit
+    onSave: (Patient) -> Unit,
+    onDeletePatient: () -> Unit = {}
 ) {
+    var name by remember { mutableStateOf(patient.name) }
+    var phone by remember { mutableStateOf(patient.phone) }
+    var status by remember { mutableStateOf(patient.status) }
     var doseMgText by remember { mutableStateOf(patient.currentDoseMg.toInt().toString()) }
     var dispenseType by remember { mutableStateOf(patient.dispenseType) }
     var takeHomeDaysText by remember { mutableStateOf(patient.takeHomeDays.toString()) }
     var doctorName by remember { mutableStateOf(patient.doctorName) }
     var notes by remember { mutableStateOf(patient.notes) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Nama Pesakit") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = phone,
+            onValueChange = { phone = it },
+            label = { Text("No. Telefon / Hubungan Kecemasan") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Text(
+            text = "Status Rawatan Pesakit:",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        val statusList = listOf("AKTIF", "CICIR", "GANTUNG", "TAMAT")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            statusList.forEach { s ->
+                val isSel = status == s
+                OutlinedButton(
+                    onClick = { status = s },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(vertical = 4.dp, horizontal = 4.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (isSel) {
+                            when (s) {
+                                "AKTIF" -> StatusGreenContainer
+                                "CICIR" -> MaterialTheme.colorScheme.errorContainer
+                                else -> MaterialTheme.colorScheme.secondaryContainer
+                            }
+                        } else Color.Transparent
+                    )
+                ) {
+                    Text(
+                        text = s,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+
         OutlinedTextField(
             value = doseMgText,
             onValueChange = { doseMgText = it.filter { ch -> ch.isDigit() } },
@@ -487,30 +573,70 @@ fun EditDoseView(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-        Button(
-            onClick = {
-                val newDose = doseMgText.toDoubleOrNull() ?: patient.currentDoseMg
-                val newVolume = String.format(Locale.US, "%.1f", newDose / 5.0).toDouble()
-                val newDays = takeHomeDaysText.toIntOrNull() ?: 0
-
-                val updated = patient.copy(
-                    currentDoseMg = newDose,
-                    doseVolumeMl = newVolume,
-                    dispenseType = dispenseType,
-                    takeHomeDays = if (dispenseType == "TAKE_HOME") newDays else 0,
-                    doctorName = doctorName.ifBlank { patient.doctorName },
-                    notes = notes.ifBlank { patient.notes }
-                )
-                onSave(updated)
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            shape = RoundedCornerShape(12.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Simpan Perubahan Dos")
+            OutlinedButton(
+                onClick = { showDeleteConfirm = true },
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Hapus Pesakit")
+            }
+
+            Button(
+                onClick = {
+                    val newDose = doseMgText.toDoubleOrNull() ?: patient.currentDoseMg
+                    val newVolume = String.format(Locale.US, "%.1f", newDose / 5.0).toDouble()
+                    val newDays = takeHomeDaysText.toIntOrNull() ?: 0
+
+                    val updated = patient.copy(
+                        name = name.ifBlank { patient.name },
+                        phone = phone,
+                        status = status,
+                        currentDoseMg = newDose,
+                        doseVolumeMl = newVolume,
+                        dispenseType = dispenseType,
+                        takeHomeDays = if (dispenseType == "TAKE_HOME") newDays else 0,
+                        doctorName = doctorName.ifBlank { patient.doctorName },
+                        notes = notes.ifBlank { patient.notes }
+                    )
+                    onSave(updated)
+                },
+                modifier = Modifier.weight(2f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Simpan Rekod")
+            }
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Sahkan Hapus Pesakit", fontWeight = FontWeight.Bold) },
+            text = { Text("Adakah anda pasti mahu menghapuskan rekod pesakit '${patient.name}' (ID: ${patient.patientId}) daripada pangkalan data?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDeletePatient()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Padamkan Rekod")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Batal")
+                }
+            }
+        )
     }
 }

@@ -75,8 +75,16 @@ fun CameraQrScanner(
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(lifecycleOwner) {
         onDispose {
+            try {
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+                if (cameraProviderFuture.isDone) {
+                    cameraProviderFuture.get().unbindAll()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
             cameraExecutor.shutdown()
         }
     }
@@ -90,6 +98,7 @@ fun CameraQrScanner(
             factory = { ctx ->
                 val previewView = PreviewView(ctx).apply {
                     scaleType = PreviewView.ScaleType.FILL_CENTER
+                    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                 }
 
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)

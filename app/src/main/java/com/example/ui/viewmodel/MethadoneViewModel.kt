@@ -4,12 +4,17 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
+import com.example.data.model.ClinicSettings
 import com.example.data.model.DispenseRecord
 import com.example.data.model.InventoryItem
 import com.example.data.model.InventoryLog
 import com.example.data.model.Patient
+import com.example.data.model.User
+import com.example.data.model.UserRoles
 import com.example.data.repository.MethadoneRepository
 import com.example.util.QrCodeUtil
+import java.io.File
+import java.io.FileOutputStream
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -50,8 +55,153 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         val db = AppDatabase.getDatabase(application)
-        repository = MethadoneRepository(db.patientDao(), db.dispenseDao(), db.inventoryDao())
+        repository = MethadoneRepository(
+            db.patientDao(),
+            db.dispenseDao(),
+            db.inventoryDao(),
+            db.userDao(),
+            db.clinicSettingsDao()
+        )
+
+        // Automatic Status Update for Defaulter / Cicir Rawatan > 4 days consecutive
+        viewModelScope.launch {
+            patients.collect { list ->
+                list.filter { it.status == "AKTIF" && it.missedDaysStreak >= 4 }.forEach { p ->
+                    val updated = p.copy(
+                        status = "CICIR",
+                        notes = "${p.notes}\n[AUTOMATIK]: Status dikemaskini ke CICIR (Defaulter) kerana tidak hadir ${p.missedDaysStreak} hari berturut-turut (> 4 hari)."
+                    )
+                    repository.updatePatient(updated)
+                }
+            }
+        }
     }
+
+    val clinicSettings: StateFlow<ClinicSettings?> = repository.clinicSettings
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ClinicSettings(
+                id = 1,
+                clinicName = "e-Methadone PKD Kluang",
+                isSetupCompleted = false,
+                activePatientsCount = 45,
+                newCasesCount = 5,
+                defaultersCount = 2,
+                restartCount = 1,
+                transferInCount = 3,
+                transferOutCount = 1,
+                deathCount = 0,
+                terminatedCount = 1,
+                autoBackupPath = "/sdcard/eMethadone_Backup"
+            )
+        )
+
+    fun saveClinicSetup(
+        clinicName: String,
+        activePatients: Int,
+        newCases: Int,
+        defaulters: Int,
+        restart: Int,
+        transferIn: Int,
+        transferOut: Int,
+        death: Int,
+        terminated: Int,
+        initialBatchNumber: String = "MTH-2026-B892",
+        initialExpiryDate: String = "2027-12-31",
+        initialStockLiters: Double = 5.0,
+        initialStrength: String = "5 mg / 1 ml",
+        autoBackupPath: String,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val name = clinicName.trim()
+            if (name.isEmpty()) {
+                onComplete(false, "Sila masukkan Nama Klinik Methadone.")
+                return@launch
+            }
+
+            val current = clinicSettings.value ?: ClinicSettings()
+            val updated = current.copy(
+                clinicName = name,
+                isSetupCompleted = true,
+                activePatientsCount = activePatients,
+                newCasesCount = newCases,
+                defaultersCount = defaulters,
+                restartCount = restart,
+                transferInCount = transferIn,
+                transferOutCount = transferOut,
+                deathCount = death,
+                terminatedCount = terminated,
+                initialBatchNumber = initialBatchNumber,
+                initialExpiryDate = initialExpiryDate,
+                initialStockLiters = initialStockLiters,
+                initialStrength = initialStrength,
+                autoBackupPath = autoBackupPath.trim().ifEmpty { "/sdcard/eMethadone_Backup" }
+            )
+
+            repository.saveClinicSettings(updated)
+            onComplete(true, "Konfigurasi Klinik '$name' & Stok Permulaan ($initialStockLiters L) berjaya disimpan!")
+        }
+    }
+
+    fun triggerAutoBackup(context: android.content.Context, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val currentConfig = clinicSettings.value ?: ClinicSettings()
+                val targetFolderPath = currentConfig.autoBackupPath.trim()
+                
+                // Create backup directory in internal app storage or configured path
+                val backupDir = File(context.filesDir, "backups").apply { mkdirs() }
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                val backupFile = File(backupDir, "eMethadone_Backup_${timestamp}.csv")
+
+                val allPatientList = patients.value
+                val records = allRecords.value
+
+                val sb = StringBuilder()
+                sb.append("\uFEFF")
+                sb.appendLine("# BACKUP DATA AUTOMATIK e-METHADONE MMT")
+                sb.appendLine("# Klinik: ${currentConfig.clinicName}")
+                sb.appendLine("# Tarikh Backup: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
+                sb.appendLine("# Total Pesakit: ${allPatientList.size}")
+                sb.appendLine("# Total Rekod Dispensasi: ${records.size}")
+                sb.appendLine("#")
+
+                sb.appendLine("PATIENTS_HEADER: ID,Nama,NoKP,Dos,Jenis,Status,Telefon")
+                allPatientList.forEach { p ->
+                    sb.appendLine("PATIENT:${p.patientId},\"${p.name}\",${p.icNumber},${p.currentDoseMg},${p.dispenseType},${p.status},${p.phoneNumber}")
+                }
+
+                sb.appendLine("DISPENSE_HEADER: ID,Tarikh,Masa,IDPesakit,Nama,DosMg,DosMl,Petugas")
+                records.forEach { r ->
+                    sb.appendLine("DISPENSE:${r.recordId},${r.dispenseDate},${r.dispenseTime},${r.patientId},\"${r.patientName}\",${r.doseMg},${r.doseVolumeMl},\"${r.officerName}\"")
+                }
+
+                FileOutputStream(backupFile).use { fos ->
+                    fos.write(sb.toString().toByteArray(Charsets.UTF_8))
+                }
+
+                val updatedSettings = currentConfig.copy(
+                    lastBackupDate = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                )
+                repository.saveClinicSettings(updatedSettings)
+
+                onResult(true, "Auto Backup Berjaya!\nLokasi: ${backupFile.absolutePath}")
+            } catch (e: Exception) {
+                onResult(false, "Ralat Auto Backup: ${e.message}")
+            }
+        }
+    }
+
+    private val _currentUser = MutableStateFlow<User?>(null)
+    val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
+
+    private val _isLoggedIn = MutableStateFlow(false)
+    val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+    private val _userRole = MutableStateFlow(UserRoles.ADMIN)
+    val userRole: StateFlow<String> = _userRole.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -65,8 +215,154 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
     private val _fastTrackMode = MutableStateFlow(false)
     val fastTrackMode: StateFlow<Boolean> = _fastTrackMode.asStateFlow()
 
-    private val _activeOfficerName = MutableStateFlow("Jururawat Kanan (Farmasi)")
+    private val _activeOfficerName = MutableStateFlow("Pentadbir Sistem (admin)")
     val activeOfficerName: StateFlow<String> = _activeOfficerName.asStateFlow()
+
+    fun login(
+        usernameInput: String,
+        passwordInput: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val trimmedUsername = usernameInput.trim()
+            val trimmedPassword = passwordInput.trim()
+
+            if (trimmedUsername.isEmpty() || trimmedPassword.isEmpty()) {
+                onResult(false, "Sila masukkan nama pengguna dan kata laluan.")
+                return@launch
+            }
+
+            // Query database for user
+            val existingUser = repository.getUserByUsername(trimmedUsername)
+
+            if (existingUser != null && existingUser.passwordHash == trimmedPassword) {
+                _currentUser.value = existingUser
+                _userRole.value = existingUser.role
+                _activeOfficerName.value = "${existingUser.fullName} (${existingUser.role})"
+                _isLoggedIn.value = true
+                onResult(true, "Selamat Datang, ${existingUser.fullName}!")
+            } else if (trimmedUsername.equals("admin", ignoreCase = true) && trimmedPassword == "admin") {
+                // Hardcoded fallback safety for admin/admin
+                val adminUser = User(
+                    username = "admin",
+                    passwordHash = "admin",
+                    fullName = "Pentadbir Utama Sistem",
+                    role = UserRoles.ADMIN,
+                    icOrStaffId = "ADMIN-001",
+                    createdDate = getTodayDateString()
+                )
+                _currentUser.value = adminUser
+                _userRole.value = UserRoles.ADMIN
+                _activeOfficerName.value = "Pentadbir Utama Sistem (Admin)"
+                _isLoggedIn.value = true
+                onResult(true, "Log masuk Pentadbir Utama berjaya!")
+            } else {
+                onResult(false, "Log masuk gagal! Nama pengguna atau kata laluan tidak sah.")
+            }
+        }
+    }
+
+    fun registerUser(
+        fullName: String,
+        icOrStaffId: String,
+        username: String,
+        password: String,
+        role: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val name = fullName.trim()
+            val id = icOrStaffId.trim()
+            val uname = username.trim()
+            val pass = password.trim()
+
+            if (name.length < 3) {
+                onResult(false, "Sila masukkan nama penuh yang sah.")
+                return@launch
+            }
+            if (id.isEmpty()) {
+                onResult(false, "Sila masukkan No. K/P atau ID Staf.")
+                return@launch
+            }
+            if (uname.length < 3) {
+                onResult(false, "Nama pengguna mestilah sekurang-kurangnya 3 aksara.")
+                return@launch
+            }
+            if (pass.length < 4) {
+                onResult(false, "Kata laluan mestilah sekurang-kurangnya 4 aksara.")
+                return@launch
+            }
+
+            val checkExistingUname = repository.getUserByUsername(uname)
+            if (checkExistingUname != null) {
+                onResult(false, "Nama pengguna '$uname' telah didaftarkan. Sila guna nama pengguna lain.")
+                return@launch
+            }
+
+            val checkExistingId = repository.getUserByIcOrStaffId(id)
+            if (checkExistingId != null) {
+                onResult(false, "No. K/P / ID Staf '$id' telah mempunyai akaun berdaftar.")
+                return@launch
+            }
+
+            val newUser = User(
+                username = uname,
+                passwordHash = pass,
+                fullName = name,
+                role = role,
+                icOrStaffId = id,
+                createdDate = getTodayDateString()
+            )
+
+            repository.insertUser(newUser)
+            onResult(true, "Pendaftaran akaun $role berjaya! Anda boleh log masuk sekarang.")
+        }
+    }
+
+    fun recoverOrResetPassword(
+        icOrStaffId: String,
+        usernameQuery: String,
+        newPasswordInput: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val id = icOrStaffId.trim()
+            val uname = usernameQuery.trim()
+            val newPass = newPasswordInput.trim()
+
+            if (id.isEmpty() && uname.isEmpty()) {
+                onResult(false, "Sila masukkan No. K/P / ID Staf atau Nama Pengguna.")
+                return@launch
+            }
+
+            val userFound = repository.findUserForRecovery(uname, id)
+
+            if (userFound == null) {
+                if (uname.equals("admin", ignoreCase = true) || id.equals("ADMIN-001", ignoreCase = true)) {
+                    onResult(true, "Akaun Admin Ditemui!\nNama Pengguna: admin\nKata Laluan Default: admin")
+                } else {
+                    onResult(false, "Tiada akaun staf ditemui untuk padanan rekod tersebut.")
+                }
+                return@launch
+            }
+
+            if (newPass.isNotEmpty()) {
+                if (newPass.length < 4) {
+                    onResult(false, "Kata laluan baharu mestilah sekurang-kurangnya 4 aksara.")
+                    return@launch
+                }
+                repository.updatePassword(userFound.username, newPass)
+                onResult(true, "Kata laluan bagi akaun '${userFound.username}' (${userFound.role}) telah berjaya dikemaskini!")
+            } else {
+                onResult(true, "Akaun Staf Ditemui!\nNama Pengguna: ${userFound.username}\nNama: ${userFound.fullName}\nPeranan: ${userFound.role}")
+            }
+        }
+    }
+
+    fun logout() {
+        _currentUser.value = null
+        _isLoggedIn.value = false
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val patients: StateFlow<List<Patient>> = _searchQuery
@@ -359,6 +655,12 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
                 time = timeStr,
                 reason = reason
             )
+        }
+    }
+
+    fun deleteInventoryLog(logId: Long) {
+        viewModelScope.launch {
+            repository.deleteInventoryLog(logId)
         }
     }
 
