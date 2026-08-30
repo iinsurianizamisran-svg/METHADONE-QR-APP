@@ -17,8 +17,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -148,8 +151,14 @@ fun PatientDetailDialog(
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    text = { Text("Kemas Kini Pesakit") },
+                    text = { Text("Kemas Kini") },
                     icon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                )
+                Tab(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    text = { Text("Saringan & ECG") },
+                    icon = { Icon(Icons.Default.MedicalServices, contentDescription = null, modifier = Modifier.size(18.dp)) }
                 )
             }
 
@@ -189,6 +198,15 @@ fun PatientDetailDialog(
                         onDeletePatient = {
                             viewModel.deletePatient(patient)
                             onDismiss()
+                        }
+                    )
+                }
+
+                3 -> {
+                    PatientScreeningView(
+                        patient = patient,
+                        onSave = { updatedPatient ->
+                            viewModel.updatePatient(updatedPatient)
                         }
                     )
                 }
@@ -641,5 +659,458 @@ fun EditDoseView(
                 }
             }
         )
+    }
+}
+
+@Composable
+fun PatientScreeningView(
+    patient: Patient,
+    onSave: (Patient) -> Unit
+) {
+    var lastXRayDate by remember { mutableStateOf(patient.lastXRayDate ?: "") }
+    var lastXRayResult by remember { mutableStateOf(patient.lastXRayResult ?: "Normal") }
+    
+    var lastEcgDate by remember { mutableStateOf(patient.lastEcgDate ?: "") }
+    var lastEcgResult by remember { mutableStateOf(patient.lastEcgResult ?: "Normal") }
+    var lastEcgQtcMsText by remember { mutableStateOf(patient.lastEcgQtcMs?.toString() ?: "") }
+    
+    var lastBloodTestDate by remember { mutableStateOf(patient.lastBloodTestDate ?: "") }
+    var hivResult by remember { mutableStateOf(patient.hivResult ?: "Non-Reactive") }
+    var hepBResult by remember { mutableStateOf(patient.hepBResult ?: "Non-Reactive") }
+    var hepCResult by remember { mutableStateOf(patient.hepCResult ?: "Non-Reactive") }
+    var lftResult by remember { mutableStateOf(patient.lftResult ?: "Normal") }
+    
+    var isSavedSuccessfully by remember { mutableStateOf(false) }
+
+    val isXRayOverdue = patient.isXRayOverdue()
+    val isEcgOverdue = patient.isEcgOverdue()
+    val isBloodTestOverdue = patient.isBloodTestOverdue()
+    val isFullyCompliant = patient.isFullyCompliant()
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(420.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            // Visual Compliance Status Indicator Card
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isFullyCompliant) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
+                ),
+                border = BorderStroke(
+                    width = 1.5.dp,
+                    color = if (isFullyCompliant) Color(0xFF4CAF50) else Color(0xFFFF9800)
+                ),
+                modifier = Modifier.fillMaxWidth().testTag("compliance_status_card")
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (isFullyCompliant) Icons.Default.CheckCircle else Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = if (isFullyCompliant) Color(0xFF2E7D32) else Color(0xFFE65100),
+                        modifier = Modifier.size(36.dp)
+                    )
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            text = if (isFullyCompliant) "KEPATUHAN SARINGAN: PATUH KKM" else "KEPATUHAN SARINGAN: TERTUNGGAK ⚠️",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isFullyCompliant) Color(0xFF1B5E20) else Color(0xFFE65100)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (isFullyCompliant) 
+                                "Semua ujian saringan diwajibkan telah didaftar dan dikemaskini dalam tempoh sah setahun." 
+                                else "Sila kemaskini saringan di bawah untuk mengekalkan pematuhan garis panduan klinikal.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isFullyCompliant) Color(0xFF2E7D32) else Color(0xFF5D4037)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Compliance Breakdown Checkmarks
+        item {
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Senarai Semak Saringan CPG KKM:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    // Chest X-Ray (Mandatory for all registered patients)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (!isXRayOverdue) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (!isXRayOverdue) Color(0xFF4CAF50) else Color(0xFFFF9800),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Chest X-Ray (Wajib Pendaftaran Baru)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (!isXRayOverdue) "Tarikh: $lastXRayDate ($lastXRayResult)" else "⚠️ Tiada rekod X-Ray didaftar",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+
+                    // ECG (Mandatory for Dosage >= 100mg)
+                    if (patient.currentDoseMg >= 100.0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (!isEcgOverdue) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = if (!isEcgOverdue) Color(0xFF4CAF50) else Color(0xFFFF9800),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Ujian ECG Tahunan (Dos Tinggi ≥ 100mg)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = if (!isEcgOverdue) "Tarikh: $lastEcgDate ($lastEcgResult - ${if (lastEcgQtcMsText.isNotBlank()) lastEcgQtcMsText + " ms" else "N/A"})" else "⚠️ ECG Tertunggak/Diperlukan",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color.Gray,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Ujian ECG Tahunan (Khas Dos ≥ 100mg)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Text(
+                                    text = "Pengecualian: Dos pesakit semasa ialah ${patient.currentDoseMg.toInt()} mg.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                    }
+
+                    // Blood Test (Mandatory annually)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (!isBloodTestOverdue) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (!isBloodTestOverdue) Color(0xFF4CAF50) else Color(0xFFFF9800),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Saringan Darah Tahunan (HIV, Hep B, Hep C, LFT)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (!isBloodTestOverdue) 
+                                    "Tarikh: $lastBloodTestDate (HIV: $hivResult, HepB: $hepBResult, HepC: $hepCResult, LFT: $lftResult)" 
+                                    else "⚠️ Saringan Darah Tertunggak (>365 hari)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Form for entering screening results
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Kemaskini Rekod Saringan & Keputusan:",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+
+                // Chest X-Ray section
+                Text("1. Chest X-Ray (Saringan Wajib)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = lastXRayDate,
+                        onValueChange = { lastXRayDate = it },
+                        label = { Text("Tarikh X-Ray (YYYY-MM-DD)") },
+                        modifier = Modifier.weight(1.5f),
+                        singleLine = true
+                    )
+                    
+                    Column(modifier = Modifier.weight(1.5f)) {
+                        Text("Keputusan:", style = MaterialTheme.typography.labelSmall)
+                        Row {
+                            OutlinedButton(
+                                onClick = { lastXRayResult = "Normal" },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 2.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (lastXRayResult == "Normal") Color(0xFFE8F5E9) else Color.Transparent
+                                )
+                            ) {
+                                Text("Normal", style = MaterialTheme.typography.labelSmall)
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            OutlinedButton(
+                                onClick = { lastXRayResult = "Abnormal" },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 2.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (lastXRayResult == "Abnormal") Color(0xFFFFEBEE) else Color.Transparent
+                                )
+                            ) {
+                                Text("Abnorm", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+
+                // ECG section
+                Text("2. Ujian ECG Tahunan", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = lastEcgDate,
+                        onValueChange = { lastEcgDate = it },
+                        label = { Text("Tarikh ECG (YYYY-MM-DD)") },
+                        modifier = Modifier.weight(1.2f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = lastEcgQtcMsText,
+                        onValueChange = { lastEcgQtcMsText = it.filter { ch -> ch.isDigit() } },
+                        label = { Text("QTc (ms)") },
+                        modifier = Modifier.weight(0.8f),
+                        singleLine = true
+                    )
+                }
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Keputusan ECG:", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                    Row(modifier = Modifier.weight(1.5f)) {
+                        OutlinedButton(
+                            onClick = { lastEcgResult = "Normal" },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (lastEcgResult == "Normal") Color(0xFFE8F5E9) else Color.Transparent
+                            )
+                        ) {
+                            Text("Normal")
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        OutlinedButton(
+                            onClick = { lastEcgResult = "Abnormal" },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (lastEcgResult == "Abnormal") Color(0xFFFFEBEE) else Color.Transparent
+                            )
+                        ) {
+                            Text("Abnormal")
+                        }
+                    }
+                }
+
+                // Blood Test section
+                Text("3. Saringan Darah Tahunan", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                OutlinedTextField(
+                    value = lastBloodTestDate,
+                    onValueChange = { lastBloodTestDate = it },
+                    label = { Text("Tarikh Ambil Darah (YYYY-MM-DD)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                // Sub test details
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // HIV
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Text("HIV Saringan:", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.2f))
+                            Row(modifier = Modifier.weight(2.5f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                OutlinedButton(
+                                    onClick = { hivResult = "Non-Reactive" },
+                                    modifier = Modifier.weight(1.3f),
+                                    contentPadding = PaddingValues(horizontal = 2.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (hivResult == "Non-Reactive") Color(0xFFE8F5E9) else Color.Transparent
+                                    )
+                                ) {
+                                    Text("Non-Reactive", style = MaterialTheme.typography.labelSmall)
+                                }
+                                OutlinedButton(
+                                    onClick = { hivResult = "Reactive" },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 2.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (hivResult == "Reactive") Color(0xFFFFEBEE) else Color.Transparent
+                                    )
+                                ) {
+                                    Text("Reactive", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+
+                        // Hep B
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Text("HBsAg (Hep B):", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.2f))
+                            Row(modifier = Modifier.weight(2.5f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                OutlinedButton(
+                                    onClick = { hepBResult = "Non-Reactive" },
+                                    modifier = Modifier.weight(1.3f),
+                                    contentPadding = PaddingValues(horizontal = 2.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (hepBResult == "Non-Reactive") Color(0xFFE8F5E9) else Color.Transparent
+                                    )
+                                ) {
+                                    Text("Non-Reactive", style = MaterialTheme.typography.labelSmall)
+                                }
+                                OutlinedButton(
+                                    onClick = { hepBResult = "Reactive" },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 2.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (hepBResult == "Reactive") Color(0xFFFFEBEE) else Color.Transparent
+                                    )
+                                ) {
+                                    Text("Reactive", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+
+                        // Hep C
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Text("Anti-HCV (Hep C):", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.2f))
+                            Row(modifier = Modifier.weight(2.5f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                OutlinedButton(
+                                    onClick = { hepCResult = "Non-Reactive" },
+                                    modifier = Modifier.weight(1.3f),
+                                    contentPadding = PaddingValues(horizontal = 2.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (hepCResult == "Non-Reactive") Color(0xFFE8F5E9) else Color.Transparent
+                                    )
+                                ) {
+                                    Text("Non-Reactive", style = MaterialTheme.typography.labelSmall)
+                                }
+                                OutlinedButton(
+                                    onClick = { hepCResult = "Reactive" },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 2.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (hepCResult == "Reactive") Color(0xFFFFEBEE) else Color.Transparent
+                                    )
+                                ) {
+                                    Text("Reactive", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+
+                        // LFT
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Text("LFT (Fungsi Hati):", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.2f))
+                            Row(modifier = Modifier.weight(2.5f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                OutlinedButton(
+                                    onClick = { lftResult = "Normal" },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 2.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (lftResult == "Normal") Color(0xFFE8F5E9) else Color.Transparent
+                                    )
+                                ) {
+                                    Text("Normal", style = MaterialTheme.typography.labelSmall)
+                                }
+                                OutlinedButton(
+                                    onClick = { lftResult = "Abnormal" },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 2.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (lftResult == "Abnormal") Color(0xFFFFEBEE) else Color.Transparent
+                                    )
+                                ) {
+                                    Text("Abnormal", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Save action
+        item {
+            if (isSavedSuccessfully) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFE8F5E9))
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Rekod Saringan Berjaya Disimpan!", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            Button(
+                onClick = {
+                    val updated = patient.copy(
+                        lastXRayDate = lastXRayDate.ifBlank { null },
+                        lastXRayResult = lastXRayResult,
+                        lastEcgDate = lastEcgDate.ifBlank { null },
+                        lastEcgResult = lastEcgResult,
+                        lastEcgQtcMs = lastEcgQtcMsText.toIntOrNull(),
+                        lastBloodTestDate = lastBloodTestDate.ifBlank { null },
+                        hivResult = hivResult,
+                        hepBResult = hepBResult,
+                        hepCResult = hepCResult,
+                        lftResult = lftResult
+                    )
+                    onSave(updated)
+                    isSavedSuccessfully = true
+                },
+                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("save_screening_results_button"),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Simpan Rekod Saringan KKM", fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }

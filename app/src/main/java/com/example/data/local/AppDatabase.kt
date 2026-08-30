@@ -21,7 +21,7 @@ import java.util.Locale
 
 @Database(
     entities = [Patient::class, DispenseRecord::class, InventoryItem::class, InventoryLog::class, User::class, ClinicSettings::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -151,10 +151,17 @@ abstract class AppDatabase : RoomDatabase() {
                     clinicLocation = "Klinik Kesihatan Cheras",
                     doctorName = "Dr. Farah Hanim (FMS)",
                     status = "AKTIF",
-                    notes = "Pesakit patuh harian. Ujian urin terkini negatif opiat.",
+                    notes = "Pesakit patuh harian. Ujian saringan berkala memuaskan.",
                     lastDispensedDate = today,
                     lastDispensedTime = "08:15:30",
-                    missedDaysStreak = 0
+                    missedDaysStreak = 0,
+                    lastXRayDate = "2026-01-15",
+                    lastXRayResult = "Normal",
+                    lastBloodTestDate = "2026-02-10",
+                    hivResult = "Non-Reactive",
+                    hepBResult = "Non-Reactive",
+                    hepCResult = "Non-Reactive",
+                    lftResult = "Normal"
                 ),
                 Patient(
                     patientId = "METH-2026-0034",
@@ -172,7 +179,14 @@ abstract class AppDatabase : RoomDatabase() {
                     notes = "Layak Bawa Balik 3 hari (Pekerjaan syif malam). Botol kosong perlu dipulangkan.",
                     lastDispensedDate = today,
                     lastDispensedTime = "08:42:10",
-                    missedDaysStreak = 0
+                    missedDaysStreak = 0,
+                    lastXRayDate = "2023-11-25",
+                    lastXRayResult = "Normal",
+                    lastBloodTestDate = "2025-03-05", // Overdue > 365 days
+                    hivResult = "Non-Reactive",
+                    hepBResult = "Non-Reactive",
+                    hepCResult = "Non-Reactive",
+                    lftResult = "Normal"
                 ),
                 Patient(
                     patientId = "METH-2026-0056",
@@ -208,7 +222,14 @@ abstract class AppDatabase : RoomDatabase() {
                     notes = "Kesihatan stabil. Rawatan integrasi Klinik Kesihatan Ibu & Anak.",
                     lastDispensedDate = null,
                     lastDispensedTime = null,
-                    missedDaysStreak = 0
+                    missedDaysStreak = 0,
+                    lastXRayDate = null, // Missing Chest X-Ray (Saringan Wajib Pesakit Baru)
+                    lastXRayResult = null,
+                    lastBloodTestDate = "2026-01-20",
+                    hivResult = "Non-Reactive",
+                    hepBResult = "Non-Reactive",
+                    hepCResult = "Non-Reactive",
+                    lftResult = "Normal"
                 ),
                 Patient(
                     patientId = "METH-2026-0091",
@@ -226,7 +247,14 @@ abstract class AppDatabase : RoomDatabase() {
                     notes = "Perhatian: Peringatan temujanji ujian fungsi hati.",
                     lastDispensedDate = null,
                     lastDispensedTime = null,
-                    missedDaysStreak = 1
+                    missedDaysStreak = 1,
+                    lastXRayDate = "2024-05-20",
+                    lastXRayResult = "Normal",
+                    lastBloodTestDate = "2026-05-02",
+                    hivResult = "Non-Reactive",
+                    hepBResult = "Non-Reactive",
+                    hepCResult = "Non-Reactive",
+                    lftResult = "Normal"
                 ),
                 Patient(
                     patientId = "METH-2026-0105",
@@ -244,7 +272,17 @@ abstract class AppDatabase : RoomDatabase() {
                     notes = "Pesakit kategori cemerlang > 3 tahun. Pengambilan ubat mingguan (7 hari).",
                     lastDispensedDate = null,
                     lastDispensedTime = null,
-                    missedDaysStreak = 0
+                    missedDaysStreak = 0,
+                    lastXRayDate = "2022-06-10",
+                    lastXRayResult = "Normal",
+                    lastBloodTestDate = "2026-01-20",
+                    hivResult = "Non-Reactive",
+                    hepBResult = "Non-Reactive",
+                    hepCResult = "Non-Reactive",
+                    lftResult = "Normal",
+                    lastEcgDate = "2025-01-10", // Overdue > 365 days for dose >= 100mg
+                    lastEcgResult = "Normal",
+                    lastEcgQtcMs = 430
                 ),
                 Patient(
                     patientId = "METH-2026-0118",

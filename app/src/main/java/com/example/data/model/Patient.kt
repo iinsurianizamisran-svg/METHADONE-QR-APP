@@ -22,9 +22,52 @@ data class Patient(
     val notes: String = "Patuh rawatan harian. Ujian saringan berkala memuaskan.",
     val lastDispensedDate: String? = null,
     val lastDispensedTime: String? = null,
-    val missedDaysStreak: Int = 0
+    val missedDaysStreak: Int = 0,
+    
+    // Annual Screenings and Compliance Fields (CPG KKM)
+    val lastXRayDate: String? = null,
+    val lastXRayResult: String? = null, // "Normal", "Abnormal"
+    val lastEcgDate: String? = null,
+    val lastEcgResult: String? = null, // "Normal", "Abnormal"
+    val lastEcgQtcMs: Int? = null,
+    val lastBloodTestDate: String? = null,
+    val hivResult: String? = null, // "Non-Reactive", "Reactive"
+    val hepBResult: String? = null, // "Non-Reactive", "Reactive" (HBsAg)
+    val hepCResult: String? = null, // "Non-Reactive", "Reactive" (Anti-HCV)
+    val lftResult: String? = null // "Normal", "Abnormal"
 ) {
     fun toQrPayload(): String {
         return "METH_QR|$patientId|$icNumber|$name|$currentDoseMg|$dispenseType"
+    }
+
+    fun isXRayOverdue(): Boolean {
+        return lastXRayDate.isNullOrBlank()
+    }
+
+    fun isEcgOverdue(): Boolean {
+        if (currentDoseMg < 100.0) return false
+        if (lastEcgDate.isNullOrBlank()) return true
+        return isDateOverOneYear(lastEcgDate)
+    }
+
+    fun isBloodTestOverdue(): Boolean {
+        if (lastBloodTestDate.isNullOrBlank()) return true
+        return isDateOverOneYear(lastBloodTestDate)
+    }
+
+    fun isFullyCompliant(): Boolean {
+        return !isXRayOverdue() && !isEcgOverdue() && !isBloodTestOverdue()
+    }
+
+    private fun isDateOverOneYear(dateStr: String): Boolean {
+        return try {
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+            val date = sdf.parse(dateStr) ?: return true
+            val diffMs = System.currentTimeMillis() - date.time
+            val diffDays = diffMs / (1000 * 60 * 60 * 24)
+            diffDays > 365
+        } catch (e: Exception) {
+            true
+        }
     }
 }
