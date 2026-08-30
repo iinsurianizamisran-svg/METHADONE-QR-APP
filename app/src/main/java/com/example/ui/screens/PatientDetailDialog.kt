@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -45,6 +47,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -63,11 +66,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.theme.StatusGreen
+import com.example.ui.theme.StatusGreenContainer
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.DispenseRecord
 import com.example.data.model.Patient
-import com.example.ui.theme.StatusGreen
-import com.example.ui.theme.StatusGreenContainer
 import com.example.ui.viewmodel.MethadoneViewModel
 import com.example.util.QrCodeUtil
 import java.util.Locale
@@ -449,7 +452,7 @@ fun EditDoseView(
     onDeletePatient: () -> Unit = {}
 ) {
     var name by remember { mutableStateOf(patient.name) }
-    var phone by remember { mutableStateOf(patient.phone) }
+    var phone by remember { mutableStateOf(patient.phoneNumber) }
     var status by remember { mutableStateOf(patient.status) }
     var doseMgText by remember { mutableStateOf(patient.currentDoseMg.toInt().toString()) }
     var dispenseType by remember { mutableStateOf(patient.dispenseType) }
@@ -597,7 +600,7 @@ fun EditDoseView(
 
                     val updated = patient.copy(
                         name = name.ifBlank { patient.name },
-                        phone = phone,
+                        phoneNumber = phone,
                         status = status,
                         currentDoseMg = newDose,
                         doseVolumeMl = newVolume,

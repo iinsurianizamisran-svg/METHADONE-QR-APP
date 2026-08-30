@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -65,14 +66,17 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
 
         // Automatic Status Update for Defaulter / Cicir Rawatan > 4 days consecutive
         viewModelScope.launch {
-            patients.collect { list ->
-                list.filter { it.status == "AKTIF" && it.missedDaysStreak >= 4 }.forEach { p ->
-                    val updated = p.copy(
-                        status = "CICIR",
-                        notes = "${p.notes}\n[AUTOMATIK]: Status dikemaskini ke CICIR (Defaulter) kerana tidak hadir ${p.missedDaysStreak} hari berturut-turut (> 4 hari)."
-                    )
-                    repository.updatePatient(updated)
+            try {
+                repository.allPatients.firstOrNull()?.let { list ->
+                    list.filter { it.status == "AKTIF" && it.missedDaysStreak >= 4 }.forEach { p ->
+                        val updated = p.copy(
+                            status = "CICIR",
+                            notes = "${p.notes}\n[AUTOMATIK]: Status dikemaskini ke CICIR (Defaulter) kerana tidak hadir ${p.missedDaysStreak} hari berturut-turut (> 4 hari)."
+                        )
+                        repository.updatePatient(updated)
+                    }
                 }
+            } catch (_: Exception) {
             }
         }
     }
