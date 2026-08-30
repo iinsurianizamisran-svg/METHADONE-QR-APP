@@ -34,7 +34,11 @@ data class Patient(
     val hivResult: String? = null, // "Non-Reactive", "Reactive"
     val hepBResult: String? = null, // "Non-Reactive", "Reactive" (HBsAg)
     val hepCResult: String? = null, // "Non-Reactive", "Reactive" (Anti-HCV)
-    val lftResult: String? = null // "Normal", "Abnormal"
+    val lftResult: String? = null, // "Normal", "Abnormal"
+
+    // Dosage Increase Request Fields (Pharmacist -> Doctor Workflow)
+    val pendingDoseIncreaseRequestMg: Double? = null,
+    val doseIncreaseRequestedBy: String? = null
 ) {
     fun toQrPayload(): String {
         return "METH_QR|$patientId|$icNumber|$name|$currentDoseMg|$dispenseType"

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Person
@@ -189,8 +190,11 @@ fun PatientDetailDialog(
 
                 2 -> {
                     // Update Patient & Status tab
+                    val userRole by viewModel.userRole.collectAsStateWithLifecycle()
                     EditDoseView(
                         patient = patient,
+                        userRole = userRole,
+                        viewModel = viewModel,
                         onSave = { updatedPatient ->
                             viewModel.updatePatient(updatedPatient)
                             onDismiss()
@@ -203,8 +207,10 @@ fun PatientDetailDialog(
                 }
 
                 3 -> {
+                    val userRole by viewModel.userRole.collectAsStateWithLifecycle()
                     PatientScreeningView(
                         patient = patient,
+                        userRole = userRole,
                         onSave = { updatedPatient ->
                             viewModel.updatePatient(updatedPatient)
                         }
@@ -221,6 +227,9 @@ fun DigitalIdCardView(
     qrBitmap: Bitmap?,
     onDirectDispense: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var showDownloadSuccess by remember { mutableStateOf<String?>(null) }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -237,7 +246,7 @@ fun DigitalIdCardView(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(18.dp),
+                    .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Clinic Emblem Header
@@ -294,21 +303,101 @@ fun DigitalIdCardView(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Big Scannable QR Code
-                if (qrBitmap != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(190.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color.White)
-                            .border(2.dp, MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(16.dp))
-                            .padding(10.dp),
-                        contentAlignment = Alignment.Center
+                // Standard CR80 layout: Split into photo left, Details and QR Code on the right
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Left Side: Beautiful Patient Photo Frame (Passport format)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Image(
-                            bitmap = qrBitmap.asImageBitmap(),
-                            contentDescription = "Kod QR Pesakit",
-                            modifier = Modifier.size(170.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(width = 110.dp, height = 145.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .border(2.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(54.dp)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "FOTO PESAKIT",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    fontSize = 9.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                                Text(
+                                    text = "(3cm x 4cm)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f),
+                                    fontSize = 8.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "KOD: ${patient.patientId.takeLast(4)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontSize = 9.sp
+                            )
+                        }
+                    }
+
+                    // Right Side: Details & Big Scannable QR Code
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        if (qrBitmap != null) {
+                            Box(
+                                modifier = Modifier
+                                    .size(130.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.White)
+                                    .border(2.dp, MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp))
+                                    .padding(6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    bitmap = qrBitmap.asImageBitmap(),
+                                    contentDescription = "Kod QR Pesakit",
+                                    modifier = Modifier.size(118.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "KOD QR IMBASAN",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 9.sp
                         )
                     }
                 }
@@ -335,6 +424,33 @@ fun DigitalIdCardView(
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
                 )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                val isFullyCompliant = patient.isFullyCompliant()
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isFullyCompliant) Color(0xFFE8F5E9) else Color(0xFFFFF3E0))
+                        .border(1.dp, if (isFullyCompliant) Color(0xFF4CAF50) else Color(0xFFFF9800), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (isFullyCompliant) Color(0xFF4CAF50) else Color(0xFFFF9800))
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isFullyCompliant) "Patuh Saringan Tahunan KKM" else "Saringan Terlepas / Diperlukan ⚠️",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isFullyCompliant) Color(0xFF2E7D32) else Color(0xFFE65100)
+                        )
+                    }
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
@@ -367,7 +483,32 @@ fun DigitalIdCardView(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Action Button
+        // Standard Wallet ID Card Download Button
+        OutlinedButton(
+            onClick = {
+                val bitmap = com.example.util.QrCodeUtil.generateDigitalIdCardBitmap(context, patient)
+                if (bitmap != null) {
+                    val path = com.example.util.QrCodeUtil.saveBitmapToStorage(context, bitmap, "MMT_KAD_${patient.patientId}")
+                    if (path != null) {
+                        showDownloadSuccess = path
+                    }
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .testTag("download_id_card_button"),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+        ) {
+            Icon(Icons.Default.FileDownload, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Muat Turun Kad ID Fizikal (Saiz Standard CR80)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Direct scan button
         Button(
             onClick = onDirectDispense,
             modifier = Modifier
@@ -380,6 +521,29 @@ fun DigitalIdCardView(
             Spacer(modifier = Modifier.width(8.dp))
             Text("Terus Ke Skrin Dispensasi", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
         }
+    }
+
+    if (showDownloadSuccess != null) {
+        AlertDialog(
+            onDismissRequest = { showDownloadSuccess = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = StatusGreen)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Kad ID Fizikal Berjaya Dijana", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Text(
+                    text = "Kad ID dengan saiz standard dompet CR80 (85.6mm x 53.98mm) telah berjaya disimpan ke simpanan peranti anda.\n\nLokasi fail:\n${showDownloadSuccess}"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showDownloadSuccess = null }) {
+                    Text("Selesai")
+                }
+            }
+        )
     }
 }
 
@@ -466,9 +630,12 @@ fun PatientHistoryView(
 @Composable
 fun EditDoseView(
     patient: Patient,
+    userRole: String,
+    viewModel: MethadoneViewModel,
     onSave: (Patient) -> Unit,
     onDeletePatient: () -> Unit = {}
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var name by remember { mutableStateOf(patient.name) }
     var phone by remember { mutableStateOf(patient.phoneNumber) }
     var status by remember { mutableStateOf(patient.status) }
@@ -479,10 +646,86 @@ fun EditDoseView(
     var notes by remember { mutableStateOf(patient.notes) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
+    // State for Pharmacist dosage request
+    var requestedDoseMgText by remember { mutableStateOf("") }
+
+    val isDoctorOrAdmin = userRole == com.example.data.model.UserRoles.DOCTOR || userRole == com.example.data.model.UserRoles.ADMIN
+    val isPharmacy = userRole == com.example.data.model.UserRoles.PHARMACY
+    val isAdmin = userRole == com.example.data.model.UserRoles.ADMIN
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        // Pending Request Banner/Actions
+        if (patient.pendingDoseIncreaseRequestMg != null) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Permohonan Peningkatan Dos Aktif",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "Farmasi (${patient.doseIncreaseRequestedBy ?: "Staff"}) memohon untuk meningkatkan dos pesakit ke ${patient.pendingDoseIncreaseRequestMg} mg (Dos semasa: ${patient.currentDoseMg} mg).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+
+                    if (isDoctorOrAdmin) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    viewModel.approveDoseIncrease(patient) { success, msg ->
+                                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = StatusGreen)
+                            ) {
+                                Text("Luluskan", color = Color.White)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.rejectDoseIncrease(patient) { success, msg ->
+                                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Tolak")
+                            }
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Menunggu Kelulusan Doktor / Pegawai Perubatan",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
@@ -536,13 +779,69 @@ fun EditDoseView(
             }
         }
 
-        OutlinedTextField(
-            value = doseMgText,
-            onValueChange = { doseMgText = it.filter { ch -> ch.isDigit() } },
-            label = { Text("Dos Preskripsi Baharu (mg)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
+        if (isDoctorOrAdmin) {
+            OutlinedTextField(
+                value = doseMgText,
+                onValueChange = { doseMgText = it.filter { ch -> ch.isDigit() } },
+                label = { Text("Dos Preskripsi Semasa (mg)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            // Read-only info or Pharmacist dosage request form
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Dos Preskripsi Semasa: ${patient.currentDoseMg} mg",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Hanya Doktor atau Pentadbir sahaja yang boleh menukar dos secara terus.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+
+                    if (isPharmacy && patient.pendingDoseIncreaseRequestMg == null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = requestedDoseMgText,
+                                onValueChange = { requestedDoseMgText = it.filter { ch -> ch.isDigit() } },
+                                label = { Text("Mohon Dos Baharu (mg)") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    val rDose = requestedDoseMgText.toDoubleOrNull()
+                                    if (rDose == null || rDose <= patient.currentDoseMg) {
+                                        android.widget.Toast.makeText(context, "Sila masukkan dos permohonan yang sah dan melebihi dos semasa.", android.widget.Toast.LENGTH_LONG).show()
+                                    } else {
+                                        viewModel.requestDoseIncrease(patient, rDose) { success, msg ->
+                                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                                            if (success) {
+                                                requestedDoseMgText = ""
+                                            }
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Mohon Dos")
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -573,7 +872,7 @@ fun EditDoseView(
             OutlinedTextField(
                 value = takeHomeDaysText,
                 onValueChange = { takeHomeDaysText = it.filter { ch -> ch.isDigit() } },
-                label = { Text("Bilangan Hari Bawa Balik (1 - 7 hari)") },
+                label = { Text("Bilangan Hari Bawa Balik (1 - 6 hari)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -600,19 +899,21 @@ fun EditDoseView(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            OutlinedButton(
-                onClick = { showDeleteConfirm = true },
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Hapus Pesakit")
+            if (isAdmin || userRole == com.example.data.model.UserRoles.DOCTOR) {
+                OutlinedButton(
+                    onClick = { showDeleteConfirm = true },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Hapus Pesakit")
+                }
             }
 
             Button(
                 onClick = {
-                    val newDose = doseMgText.toDoubleOrNull() ?: patient.currentDoseMg
+                    val newDose = if (isDoctorOrAdmin) (doseMgText.toDoubleOrNull() ?: patient.currentDoseMg) else patient.currentDoseMg
                     val newVolume = String.format(Locale.US, "%.1f", newDose / 5.0).toDouble()
                     val newDays = takeHomeDaysText.toIntOrNull() ?: 0
 
@@ -623,7 +924,7 @@ fun EditDoseView(
                         currentDoseMg = newDose,
                         doseVolumeMl = newVolume,
                         dispenseType = dispenseType,
-                        takeHomeDays = if (dispenseType == "TAKE_HOME") newDays else 0,
+                        takeHomeDays = if (dispenseType == "TAKE_HOME") newDays.coerceAtMost(6) else 0,
                         doctorName = doctorName.ifBlank { patient.doctorName },
                         notes = notes.ifBlank { patient.notes }
                     )
@@ -665,8 +966,13 @@ fun EditDoseView(
 @Composable
 fun PatientScreeningView(
     patient: Patient,
+    userRole: String,
     onSave: (Patient) -> Unit
 ) {
+    val isAllowedToEdit = userRole == com.example.data.model.UserRoles.ADMIN || 
+                          userRole == com.example.data.model.UserRoles.DOCTOR || 
+                          userRole == com.example.data.model.UserRoles.AMO
+
     var lastXRayDate by remember { mutableStateOf(patient.lastXRayDate ?: "") }
     var lastXRayResult by remember { mutableStateOf(patient.lastXRayResult ?: "Normal") }
     
@@ -867,14 +1173,15 @@ fun PatientScreeningView(
                         onValueChange = { lastXRayDate = it },
                         label = { Text("Tarikh X-Ray (YYYY-MM-DD)") },
                         modifier = Modifier.weight(1.5f),
-                        singleLine = true
+                        singleLine = true,
+                        enabled = isAllowedToEdit
                     )
                     
                     Column(modifier = Modifier.weight(1.5f)) {
                         Text("Keputusan:", style = MaterialTheme.typography.labelSmall)
                         Row {
                             OutlinedButton(
-                                onClick = { lastXRayResult = "Normal" },
+                                onClick = { if (isAllowedToEdit) lastXRayResult = "Normal" },
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 2.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(
@@ -885,7 +1192,7 @@ fun PatientScreeningView(
                             }
                             Spacer(modifier = Modifier.width(4.dp))
                             OutlinedButton(
-                                onClick = { lastXRayResult = "Abnormal" },
+                                onClick = { if (isAllowedToEdit) lastXRayResult = "Abnormal" },
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 2.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(
@@ -906,21 +1213,23 @@ fun PatientScreeningView(
                         onValueChange = { lastEcgDate = it },
                         label = { Text("Tarikh ECG (YYYY-MM-DD)") },
                         modifier = Modifier.weight(1.2f),
-                        singleLine = true
+                        singleLine = true,
+                        enabled = isAllowedToEdit
                     )
                     OutlinedTextField(
                         value = lastEcgQtcMsText,
                         onValueChange = { lastEcgQtcMsText = it.filter { ch -> ch.isDigit() } },
                         label = { Text("QTc (ms)") },
                         modifier = Modifier.weight(0.8f),
-                        singleLine = true
+                        singleLine = true,
+                        enabled = isAllowedToEdit
                     )
                 }
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Keputusan ECG:", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
                     Row(modifier = Modifier.weight(1.5f)) {
                         OutlinedButton(
-                            onClick = { lastEcgResult = "Normal" },
+                            onClick = { if (isAllowedToEdit) lastEcgResult = "Normal" },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 containerColor = if (lastEcgResult == "Normal") Color(0xFFE8F5E9) else Color.Transparent
@@ -930,7 +1239,7 @@ fun PatientScreeningView(
                         }
                         Spacer(modifier = Modifier.width(6.dp))
                         OutlinedButton(
-                            onClick = { lastEcgResult = "Abnormal" },
+                            onClick = { if (isAllowedToEdit) lastEcgResult = "Abnormal" },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 containerColor = if (lastEcgResult == "Abnormal") Color(0xFFFFEBEE) else Color.Transparent
@@ -948,7 +1257,8 @@ fun PatientScreeningView(
                     onValueChange = { lastBloodTestDate = it },
                     label = { Text("Tarikh Ambil Darah (YYYY-MM-DD)") },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    singleLine = true,
+                    enabled = isAllowedToEdit
                 )
 
                 // Sub test details
@@ -962,7 +1272,7 @@ fun PatientScreeningView(
                             Text("HIV Saringan:", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.2f))
                             Row(modifier = Modifier.weight(2.5f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 OutlinedButton(
-                                    onClick = { hivResult = "Non-Reactive" },
+                                    onClick = { if (isAllowedToEdit) hivResult = "Non-Reactive" },
                                     modifier = Modifier.weight(1.3f),
                                     contentPadding = PaddingValues(horizontal = 2.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
@@ -972,7 +1282,7 @@ fun PatientScreeningView(
                                     Text("Non-Reactive", style = MaterialTheme.typography.labelSmall)
                                 }
                                 OutlinedButton(
-                                    onClick = { hivResult = "Reactive" },
+                                    onClick = { if (isAllowedToEdit) hivResult = "Reactive" },
                                     modifier = Modifier.weight(1f),
                                     contentPadding = PaddingValues(horizontal = 2.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
@@ -989,7 +1299,7 @@ fun PatientScreeningView(
                             Text("HBsAg (Hep B):", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.2f))
                             Row(modifier = Modifier.weight(2.5f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 OutlinedButton(
-                                    onClick = { hepBResult = "Non-Reactive" },
+                                    onClick = { if (isAllowedToEdit) hepBResult = "Non-Reactive" },
                                     modifier = Modifier.weight(1.3f),
                                     contentPadding = PaddingValues(horizontal = 2.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
@@ -999,7 +1309,7 @@ fun PatientScreeningView(
                                     Text("Non-Reactive", style = MaterialTheme.typography.labelSmall)
                                 }
                                 OutlinedButton(
-                                    onClick = { hepBResult = "Reactive" },
+                                    onClick = { if (isAllowedToEdit) hepBResult = "Reactive" },
                                     modifier = Modifier.weight(1f),
                                     contentPadding = PaddingValues(horizontal = 2.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
@@ -1016,7 +1326,7 @@ fun PatientScreeningView(
                             Text("Anti-HCV (Hep C):", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.2f))
                             Row(modifier = Modifier.weight(2.5f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 OutlinedButton(
-                                    onClick = { hepCResult = "Non-Reactive" },
+                                    onClick = { if (isAllowedToEdit) hepCResult = "Non-Reactive" },
                                     modifier = Modifier.weight(1.3f),
                                     contentPadding = PaddingValues(horizontal = 2.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
@@ -1026,7 +1336,7 @@ fun PatientScreeningView(
                                     Text("Non-Reactive", style = MaterialTheme.typography.labelSmall)
                                 }
                                 OutlinedButton(
-                                    onClick = { hepCResult = "Reactive" },
+                                    onClick = { if (isAllowedToEdit) hepCResult = "Reactive" },
                                     modifier = Modifier.weight(1f),
                                     contentPadding = PaddingValues(horizontal = 2.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
@@ -1043,7 +1353,7 @@ fun PatientScreeningView(
                             Text("LFT (Fungsi Hati):", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1.2f))
                             Row(modifier = Modifier.weight(2.5f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 OutlinedButton(
-                                    onClick = { lftResult = "Normal" },
+                                    onClick = { if (isAllowedToEdit) lftResult = "Normal" },
                                     modifier = Modifier.weight(1f),
                                     contentPadding = PaddingValues(horizontal = 2.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
@@ -1053,7 +1363,7 @@ fun PatientScreeningView(
                                     Text("Normal", style = MaterialTheme.typography.labelSmall)
                                 }
                                 OutlinedButton(
-                                    onClick = { lftResult = "Abnormal" },
+                                    onClick = { if (isAllowedToEdit) lftResult = "Abnormal" },
                                     modifier = Modifier.weight(1f),
                                     contentPadding = PaddingValues(horizontal = 2.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
@@ -1091,25 +1401,31 @@ fun PatientScreeningView(
 
             Button(
                 onClick = {
-                    val updated = patient.copy(
-                        lastXRayDate = lastXRayDate.ifBlank { null },
-                        lastXRayResult = lastXRayResult,
-                        lastEcgDate = lastEcgDate.ifBlank { null },
-                        lastEcgResult = lastEcgResult,
-                        lastEcgQtcMs = lastEcgQtcMsText.toIntOrNull(),
-                        lastBloodTestDate = lastBloodTestDate.ifBlank { null },
-                        hivResult = hivResult,
-                        hepBResult = hepBResult,
-                        hepCResult = hepCResult,
-                        lftResult = lftResult
-                    )
-                    onSave(updated)
-                    isSavedSuccessfully = true
+                    if (isAllowedToEdit) {
+                        val updated = patient.copy(
+                            lastXRayDate = lastXRayDate.ifBlank { null },
+                            lastXRayResult = lastXRayResult,
+                            lastEcgDate = lastEcgDate.ifBlank { null },
+                            lastEcgResult = lastEcgResult,
+                            lastEcgQtcMs = lastEcgQtcMsText.toIntOrNull(),
+                            lastBloodTestDate = lastBloodTestDate.ifBlank { null },
+                            hivResult = hivResult,
+                            hepBResult = hepBResult,
+                            hepCResult = hepCResult,
+                            lftResult = lftResult
+                        )
+                        onSave(updated)
+                        isSavedSuccessfully = true
+                    }
                 },
+                enabled = isAllowedToEdit,
                 modifier = Modifier.fillMaxWidth().height(48.dp).testTag("save_screening_results_button"),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Simpan Rekod Saringan KKM", fontWeight = FontWeight.Bold)
+                Text(
+                    text = if (isAllowedToEdit) "Simpan Rekod Saringan KKM" else "Akses Terhad (AMO, Doktor & Admin Sahaja)",
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

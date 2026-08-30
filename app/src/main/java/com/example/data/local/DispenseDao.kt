@@ -42,4 +42,10 @@ interface DispenseDao {
 
     @Query("DELETE FROM dispense_records WHERE recordId = :id")
     suspend fun deleteRecordById(id: Long)
+
+    @Query("SELECT * FROM dispense_records WHERE isSynced = 0")
+    suspend fun getUnsyncedRecords(): List<DispenseRecord>
+
+    @Query("UPDATE dispense_records SET isSynced = 1 WHERE recordId = :recordId")
+    suspend fun markAsSynced(recordId: Long)
 }

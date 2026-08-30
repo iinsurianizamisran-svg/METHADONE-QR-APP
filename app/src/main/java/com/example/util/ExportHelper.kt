@@ -504,4 +504,229 @@ object ExportHelper {
         clipboard.setPrimaryClip(clip)
         Toast.makeText(context, "$label disalin ke papan keratan (Clipboard)!", Toast.LENGTH_SHORT).show()
     }
+
+    /**
+     * Generates compliance and attendance report in CSV format.
+     */
+    fun generateComplianceReportCsv(
+        clinicName: String,
+        patients: List<Patient>,
+        todayStr: String,
+        officerName: String
+    ): String {
+        val sb = StringBuilder()
+        sb.append("\uFEFF") // UTF-8 BOM
+        sb.appendLine("# LAPORAN PEMATUHAN SARINGAN TAHUNAN & KEHADIRAN KKM")
+        sb.appendLine("# Klinik: $clinicName")
+        sb.appendLine("# Tarikh Dijana: $todayStr")
+        sb.appendLine("# Pegawai Bertanggungjawab: $officerName")
+        sb.appendLine("#")
+        sb.appendLine("No,ID Pesakit,Nama,No. K/P,Dos Semasa (mg),Kehadiran Hari Ini,Status Saringan,X-Ray Dada,ECG,Ujian Darah,Catatan")
+
+        patients.forEachIndexed { index, p ->
+            val isAttendedToday = p.lastDispensedDate == todayStr
+            val attendanceText = if (isAttendedToday) "Hadir" else "Belum Hadir"
+
+            val isCompliant = p.isFullyCompliant()
+            val statusText = if (isCompliant) "PATUH" else "TIDAK PATUH"
+
+            val xrayText = p.lastXRayDate ?: "BELUM DILAKUKAN"
+            val ecgText = if (p.currentDoseMg >= 100.0) (p.lastEcgDate ?: "BELUM DILAKUKAN") else "TIDAK DIWAJIBKAN (<100mg)"
+            val bloodText = p.lastBloodTestDate ?: "BELUM DILAKUKAN"
+
+            val row = listOf(
+                (index + 1).toString(),
+                escapeCsv(p.patientId),
+                escapeCsv(p.name),
+                escapeCsv(p.icNumber),
+                p.currentDoseMg.toString(),
+                escapeCsv(attendanceText),
+                escapeCsv(statusText),
+                escapeCsv(xrayText),
+                escapeCsv(ecgText),
+                escapeCsv(bloodText),
+                escapeCsv(p.notes)
+            )
+            sb.appendLine(row.joinToString(","))
+        }
+
+        return sb.toString()
+    }
+
+    /**
+     * Generates compliance and attendance report in PDF format.
+     */
+    fun generateComplianceReportPdf(
+        context: Context,
+        clinicName: String,
+        patients: List<Patient>,
+        todayStr: String,
+        officerName: String
+    ): File {
+        val pdfDocument = PdfDocument()
+        val pageWidth = 595
+        val pageHeight = 842
+        var pageNumber = 1
+
+        var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        var page = pdfDocument.startPage(pageInfo)
+        var canvas = page.canvas
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = 12f
+            color = Color.WHITE
+        }
+        val subTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            textSize = 8.5f
+            color = Color.LTGRAY
+        }
+        val headerTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = 9f
+            color = Color.rgb(30, 41, 59)
+        }
+        val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            textSize = 8f
+            color = Color.rgb(51, 65, 85)
+        }
+        val tableHeaderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = 8.5f
+            color = Color.WHITE
+        }
+
+        fun drawPageHeader(canvas: Canvas, pageNum: Int) {
+            val bannerPaint = Paint().apply { color = Color.rgb(30, 58, 138) } // Navy Header
+            canvas.drawRect(0f, 0f, pageWidth.toFloat(), 60f, bannerPaint)
+
+            canvas.drawText("KLINIK KESIHATAN KKM - PROGRAM RAWATAN METHADONE", 20f, 24f, titlePaint)
+            canvas.drawText("LAPORAN PEMATUHAN SARINGAN TAHUNAN & KEHADIRAN PESAKIT", 20f, 42f, subTitlePaint)
+
+            val infoBgPaint = Paint().apply { color = Color.rgb(241, 245, 249) }
+            canvas.drawRect(0f, 60f, pageWidth.toFloat(), 95f, infoBgPaint)
+
+            canvas.drawText("Klinik: $clinicName", 20f, 78f, headerTextPaint)
+            canvas.drawText("Petugas: $officerName", 220f, 78f, headerTextPaint)
+            canvas.drawText("Muka Surat: $pageNum | Tarikh: $todayStr", 400f, 78f, bodyPaint)
+        }
+
+        drawPageHeader(canvas, pageNumber)
+
+        var currentY = 110f
+
+        // Draw Summary Card
+        val totalPatients = patients.size
+        val compliantCount = patients.count { it.isFullyCompliant() }
+        val pendingCount = totalPatients - compliantCount
+
+        val boxPaint = Paint().apply {
+            color = Color.rgb(239, 246, 255)
+            style = Paint.Style.FILL
+        }
+        val borderPaint = Paint().apply {
+            color = Color.rgb(59, 130, 246)
+            style = Paint.Style.STROKE
+            strokeWidth = 1f
+        }
+
+        canvas.drawRoundRect(RectF(20f, currentY, pageWidth - 20f, currentY + 50f), 8f, 8f, boxPaint)
+        canvas.drawRoundRect(RectF(20f, currentY, pageWidth - 20f, currentY + 50f), 8f, 8f, borderPaint)
+
+        val statTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = 9.5f
+            color = Color.rgb(30, 58, 138)
+        }
+        canvas.drawText("STATISTIK KEPATUHAN SARINGAN TAHUNAN KKM", 30f, currentY + 16f, statTitlePaint)
+        canvas.drawText(
+            "Jumlah Pesakit: $totalPatients org | Patuh Saringan: $compliantCount org | Terlepas: $pendingCount org",
+            30f, currentY + 34f, bodyPaint
+        )
+
+        currentY += 65f
+
+        // Table Header
+        fun drawTableHeader(canvas: Canvas, y: Float) {
+            val thBgPaint = Paint().apply { color = Color.rgb(30, 41, 59) }
+            canvas.drawRect(20f, y, pageWidth - 20f, y + 22f, thBgPaint)
+
+            val colY = y + 15f
+            canvas.drawText("#", 25f, colY, tableHeaderPaint)
+            canvas.drawText("ID / Nama Pesakit", 45f, colY, tableHeaderPaint)
+            canvas.drawText("Dos", 185f, colY, tableHeaderPaint)
+            canvas.drawText("Hadir Hari Ini", 230f, colY, tableHeaderPaint)
+            canvas.drawText("X-Ray", 310f, colY, tableHeaderPaint)
+            canvas.drawText("ECG", 380f, colY, tableHeaderPaint)
+            canvas.drawText("Darah", 450f, colY, tableHeaderPaint)
+            canvas.drawText("Kepatuhan", 520f, colY, tableHeaderPaint)
+        }
+
+        drawTableHeader(canvas, currentY)
+        currentY += 22f
+
+        val rowBgPaintEven = Paint().apply { color = Color.WHITE }
+        val rowBgPaintOdd = Paint().apply { color = Color.rgb(248, 250, 252) }
+        val gridLinePaint = Paint().apply {
+            color = Color.rgb(226, 232, 240)
+            strokeWidth = 0.5f
+        }
+
+        patients.forEachIndexed { index, p ->
+            if (currentY + 22f > pageHeight - 70f) {
+                pdfDocument.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                page = pdfDocument.startPage(pageInfo)
+                canvas = page.canvas
+
+                drawPageHeader(canvas, pageNumber)
+                currentY = 110f
+                drawTableHeader(canvas, currentY)
+                currentY += 22f
+            }
+
+            val bgPaint = if (index % 2 == 0) rowBgPaintEven else rowBgPaintOdd
+            canvas.drawRect(20f, currentY, pageWidth - 20f, currentY + 20f, bgPaint)
+            canvas.drawLine(20f, currentY + 20f, pageWidth - 20f, currentY + 20f, gridLinePaint)
+
+            val rowY = currentY + 14f
+            canvas.drawText("${index + 1}", 25f, rowY, bodyPaint)
+
+            val displayName = if (p.name.length > 20) p.name.take(18) + ".." else p.name
+            canvas.drawText("${p.patientId} - $displayName", 45f, rowY, bodyPaint)
+            canvas.drawText("${p.currentDoseMg.toInt()} mg", 185f, rowY, bodyPaint)
+
+            val isAttended = p.lastDispensedDate == todayStr
+            canvas.drawText(if (isAttended) "Ya" else "Tidak", 230f, rowY, bodyPaint)
+
+            canvas.drawText(p.lastXRayDate ?: "Tiada", 310f, rowY, bodyPaint)
+
+            val ecgVal = if (p.currentDoseMg < 100.0) "N/A" else (p.lastEcgDate ?: "Tiada")
+            canvas.drawText(ecgVal, 380f, rowY, bodyPaint)
+
+            canvas.drawText(p.lastBloodTestDate ?: "Tiada", 450f, rowY, bodyPaint)
+
+            val complianceText = if (p.isFullyCompliant()) "PATUH" else "TIDAK PATUH"
+            canvas.drawText(complianceText, 520f, rowY, if (p.isFullyCompliant()) headerTextPaint else bodyPaint)
+
+            currentY += 20f
+        }
+
+        pdfDocument.finishPage(page)
+
+        val fileName = "Laporan_Saringan_Kepatuhan_${clinicName.replace(" ", "_")}_${System.currentTimeMillis()}.pdf"
+        val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
+        val file = File(exportDir, fileName)
+
+        FileOutputStream(file).use { out ->
+            pdfDocument.writeTo(out)
+        }
+        pdfDocument.close()
+
+        return file
+    }
 }

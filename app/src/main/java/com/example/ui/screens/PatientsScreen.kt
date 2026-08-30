@@ -66,6 +66,11 @@ fun PatientsScreen(
 ) {
     val patients by viewModel.patients.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val userRole by viewModel.userRole.collectAsStateWithLifecycle()
+
+    val canRegister = userRole == com.example.data.model.UserRoles.ADMIN || 
+                      userRole == com.example.data.model.UserRoles.DOCTOR || 
+                      userRole == com.example.data.model.UserRoles.AMO
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showQrGeneratorScreen by remember { mutableStateOf(false) }
@@ -235,22 +240,24 @@ fun PatientsScreen(
         }
 
         // Floating Action Button to Register New Patient
-        FloatingActionButton(
-            onClick = { showAddDialog = true },
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp)
-                .testTag("add_patient_fab")
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 16.dp)
+        if (canRegister) {
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(20.dp)
+                    .testTag("add_patient_fab")
             ) {
-                Icon(Icons.Default.PersonAdd, contentDescription = "Daftar Pesakit")
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Daftar Baharu", fontWeight = FontWeight.Bold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                ) {
+                    Icon(Icons.Default.PersonAdd, contentDescription = "Daftar Pesakit")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Daftar Baharu", fontWeight = FontWeight.Bold)
+                }
             }
         }
 

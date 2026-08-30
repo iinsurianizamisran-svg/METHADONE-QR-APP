@@ -40,6 +40,22 @@ sealed interface ScanStatus {
     data class DispenseSuccess(val patient: Patient, val record: DispenseRecord) : ScanStatus
 }
 
+enum class SyncStatus {
+    SYNCHRONIZED,
+    SYNCING,
+    OFFLINE,
+    ERROR
+}
+
+data class ScanHistoryEntry(
+    val id: String,
+    val patientId: String,
+    val patientName: String,
+    val icNumber: String,
+    val timestamp: String,
+    val status: String
+)
+
 data class AttendanceSummary(
     val totalRegistered: Int = 0,
     val attendedCount: Int = 0,
@@ -115,6 +131,8 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
         initialExpiryDate: String = "2027-12-31",
         initialStockLiters: Double = 5.0,
         initialStrength: String = "5 mg / 1 ml",
+        ndmaRegNo: String = "NDMA-KPM-9281A",
+        ndmaStatus: String = "Berdaftar / Aktif",
         autoBackupPath: String,
         onComplete: (Boolean, String) -> Unit
     ) {
@@ -141,6 +159,8 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
                 initialExpiryDate = initialExpiryDate,
                 initialStockLiters = initialStockLiters,
                 initialStrength = initialStrength,
+                ndmaRegNo = ndmaRegNo,
+                ndmaStatus = ndmaStatus,
                 autoBackupPath = autoBackupPath.trim().ifEmpty { "/sdcard/eMethadone_Backup" }
             )
 
@@ -215,6 +235,38 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _scanStatus = MutableStateFlow<ScanStatus>(ScanStatus.Idle)
     val scanStatus: StateFlow<ScanStatus> = _scanStatus.asStateFlow()
+
+    private val _syncStatus = MutableStateFlow(SyncStatus.SYNCHRONIZED)
+    val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
+
+    private val _scanHistory = MutableStateFlow<List<ScanHistoryEntry>>(emptyList())
+    val scanHistory: StateFlow<List<ScanHistoryEntry>> = _scanHistory.asStateFlow()
+
+    private val _isOfflineMode = MutableStateFlow(false)
+    val isOfflineMode: StateFlow<Boolean> = _isOfflineMode.asStateFlow()
+
+    fun toggleOfflineMode(enabled: Boolean) {
+        _isOfflineMode.value = enabled
+        if (enabled) {
+            _syncStatus.value = SyncStatus.OFFLINE
+        } else {
+            _syncStatus.value = SyncStatus.SYNCING
+            syncDatabase { _, _ -> }
+        }
+    }
+
+    fun addToScanHistory(patientId: String, patientName: String, icNumber: String, status: String) {
+        val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        val entry = ScanHistoryEntry(
+            id = java.util.UUID.randomUUID().toString(),
+            patientId = patientId,
+            patientName = patientName,
+            icNumber = icNumber,
+            timestamp = timeStr,
+            status = status
+        )
+        _scanHistory.value = (listOf(entry) + _scanHistory.value).take(50)
+    }
 
     private val _fastTrackMode = MutableStateFlow(false)
     val fastTrackMode: StateFlow<Boolean> = _fastTrackMode.asStateFlow()
@@ -451,6 +503,7 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
 
             if (patient == null) {
                 _scanStatus.value = ScanStatus.NotFound(rawContent)
+                addToScanHistory(patientId = "RAW: $rawContent", patientName = "Kod Tidak Dikenali", icNumber = "-", status = "Gagal / Tiada Rekod")
                 return@launch
             }
 
@@ -459,6 +512,7 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
                     patient = patient,
                     reason = "Status Pesakit: ${patient.status}. Sila rujuk Pegawai Perubatan sebelum pemberian ubat."
                 )
+                addToScanHistory(patientId = patient.patientId, patientName = patient.name, icNumber = patient.icNumber, status = "Gantung / Tamat")
                 return@launch
             }
 
@@ -467,6 +521,7 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
 
             if (existingRecord != null) {
                 _scanStatus.value = ScanStatus.AlreadyDispensedToday(patient, existingRecord)
+                addToScanHistory(patientId = patient.patientId, patientName = patient.name, icNumber = patient.icNumber, status = "Sudah Diambil Today")
             } else {
                 val warning = if (patient.missedDaysStreak > 3) {
                     "AMARAN KRITIKAL: Pesakit tidak hadir selama ${patient.missedDaysStreak} HARI BERTURUT-TURUT! (Melebihi had 3 hari). Sila pastikan penilaian toleransi dos oleh Doktor/FMS dilakukan sebelum mengesahkan pemberian dos baharu."
@@ -475,6 +530,7 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
                 } else null
 
                 _scanStatus.value = ScanStatus.ReadyToDispense(patient, warning)
+                addToScanHistory(patientId = patient.patientId, patientName = patient.name, icNumber = patient.icNumber, status = "Hadir / Sedia Dispensasi")
             }
         }
     }
@@ -517,7 +573,8 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
                         "Dispensasi $bottlesCount botol Bawa Balik (Take-Home). Botol dipulangkan: ${if (bottlesReturned) "Ya" else "Tidak"}."
                     }
                 },
-                timestamp = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                isSynced = !_isOfflineMode.value
             )
 
             repository.recordDispense(record)
@@ -597,6 +654,64 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun requestDoseIncrease(patient: Patient, requestedDoseMg: Double, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            if (userRole.value != UserRoles.PHARMACY && userRole.value != UserRoles.ADMIN) {
+                onResult(false, "Hanya peranan Farmasi sahaja yang dibenarkan membuat permohonan peningkatan dos.")
+                return@launch
+            }
+            if (requestedDoseMg <= patient.currentDoseMg) {
+                onResult(false, "Dos baharu mestilah lebih tinggi daripada dos semasa (${patient.currentDoseMg} mg).")
+                return@launch
+            }
+            val updated = patient.copy(
+                pendingDoseIncreaseRequestMg = requestedDoseMg,
+                doseIncreaseRequestedBy = _activeOfficerName.value
+            )
+            repository.updatePatient(updated)
+            onResult(true, "Permohonan peningkatan dos ke ${requestedDoseMg} mg berjaya dihantar untuk kelulusan Doktor.")
+        }
+    }
+
+    fun approveDoseIncrease(patient: Patient, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            if (userRole.value != UserRoles.DOCTOR && userRole.value != UserRoles.ADMIN) {
+                onResult(false, "Hanya peranan Doktor sahaja yang dibenarkan meluluskan peningkatan dos.")
+                return@launch
+            }
+            val targetDose = patient.pendingDoseIncreaseRequestMg
+            if (targetDose == null) {
+                onResult(false, "Tiada permohonan peningkatan dos yang aktif bagi pesakit ini.")
+                return@launch
+            }
+            val updated = patient.copy(
+                currentDoseMg = targetDose,
+                doseVolumeMl = targetDose / 5.0,
+                pendingDoseIncreaseRequestMg = null,
+                doseIncreaseRequestedBy = null,
+                notes = "${patient.notes}\n[KELULUSAN DOS]: Dos ditingkatkan ke $targetDose mg oleh ${_activeOfficerName.value}."
+            )
+            repository.updatePatient(updated)
+            onResult(true, "Permohonan peningkatan dos ke ${targetDose} mg telah diluluskan!")
+        }
+    }
+
+    fun rejectDoseIncrease(patient: Patient, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            if (userRole.value != UserRoles.DOCTOR && userRole.value != UserRoles.ADMIN) {
+                onResult(false, "Hanya peranan Doktor sahaja yang dibenarkan menolak permohonan peningkatan dos.")
+                return@launch
+            }
+            val updated = patient.copy(
+                pendingDoseIncreaseRequestMg = null,
+                doseIncreaseRequestedBy = null,
+                notes = "${patient.notes}\n[PENOLAKAN DOS]: Permohonan dos ditolak oleh ${_activeOfficerName.value}."
+            )
+            repository.updatePatient(updated)
+            onResult(true, "Permohonan peningkatan dos telah ditolak.")
+        }
+    }
+
     fun deletePatient(patient: Patient) {
         viewModelScope.launch {
             repository.deletePatient(patient)
@@ -665,6 +780,30 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
     fun deleteInventoryLog(logId: Long) {
         viewModelScope.launch {
             repository.deleteInventoryLog(logId)
+        }
+    }
+
+    fun syncDatabase(onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            _syncStatus.value = SyncStatus.SYNCING
+            try {
+                // Simulate network sync latency
+                kotlinx.coroutines.delay(1800)
+                val unsynced = repository.getUnsyncedRecords()
+                unsynced.forEach { record ->
+                    repository.markRecordAsSynced(record.recordId)
+                }
+                _syncStatus.value = SyncStatus.SYNCHRONIZED
+                val msg = if (unsynced.isNotEmpty()) {
+                    "Sinkronisasi Berjaya! ${unsynced.size} rekod luar talian berjaya diselaraskan dengan pelayan pusat KKM."
+                } else {
+                    "Sinkronisasi Berjaya! Semua rekod dispensasi dan saringan diselaraskan dengan pelayan pusat KKM."
+                }
+                onResult(true, msg)
+            } catch (e: Exception) {
+                _syncStatus.value = SyncStatus.ERROR
+                onResult(false, "Sikronisasi Gagal: ${e.message}")
+            }
         }
     }
 

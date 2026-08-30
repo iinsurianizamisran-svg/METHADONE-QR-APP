@@ -267,5 +267,13 @@ class MethadoneRepository(
     suspend fun deleteDispenseRecord(record: DispenseRecord) {
         dispenseDao.deleteRecord(record)
     }
+
+    suspend fun getUnsyncedRecords(): List<DispenseRecord> {
+        return dispenseDao.getUnsyncedRecords()
+    }
+
+    suspend fun markRecordAsSynced(recordId: Long) {
+        dispenseDao.markAsSynced(recordId)
+    }
 }
 

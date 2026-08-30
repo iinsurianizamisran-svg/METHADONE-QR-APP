@@ -77,6 +77,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.UserRoles
 import com.example.ui.theme.StatusGreen
 import com.example.ui.viewmodel.MethadoneViewModel
@@ -94,6 +95,8 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit
 ) {
     val context = LocalContext.current
+    val clinicSettings by viewModel.clinicSettings.collectAsStateWithLifecycle()
+    val clinicNameDisplay = clinicSettings?.clinicName ?: "e-Methadone PKD Kluang"
     var authMode by remember { mutableStateOf(AuthMode.LOGIN) }
 
     // Form fields
@@ -177,7 +180,7 @@ fun LoginScreen(
                 )
 
                 Text(
-                    text = "Klinik Kesihatan Cheras - Program MMT KKM",
+                    text = "$clinicNameDisplay - Program MMT KKM",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.9f),
                     fontWeight = FontWeight.Medium

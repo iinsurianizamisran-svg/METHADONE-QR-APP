@@ -21,5 +21,6 @@ data class DispenseRecord(
     val scanMethod: String = "PENGIMBAS_QR", // "PENGIMBAS_QR", "CARIAN_MANUAL", "KAD_DIGITAL"
     val attendanceStatus: String = "HADIR_DISPENSI", // "HADIR_DISPENSI", "HADIR_JUMPA_DOKTOR", "TIDAK_HADIR"
     val remarks: String = "Ubat diminum sepenuhnya di hadapan petugas (DOT).",
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val isSynced: Boolean = true
 )

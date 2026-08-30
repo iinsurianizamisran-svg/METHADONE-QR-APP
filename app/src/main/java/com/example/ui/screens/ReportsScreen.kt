@@ -659,6 +659,145 @@ fun NkmaMonthlyReportView(
             }
         }
 
+        // Laporan Khas Saringan & Kehadiran KKM (AMO & Admin Only)
+        item {
+            val userRole by viewModel.userRole.collectAsStateWithLifecycle()
+            val isAmoOrAdmin = userRole == com.example.data.model.UserRoles.ADMIN || userRole == com.example.data.model.UserRoles.AMO
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isAmoOrAdmin) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                ),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                modifier = Modifier.fillMaxWidth().testTag("compliance_report_section")
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Laporan Saringan Tahunan & Kehadiran KKM",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Akses Eksport Khas: Pentadbir & AMO Sahaja",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isAmoOrAdmin) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outline
+                            )
+                        }
+
+                        Icon(
+                            imageVector = Icons.Default.Assessment,
+                            contentDescription = null,
+                            tint = if (isAmoOrAdmin) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+                    if (isAmoOrAdmin) {
+                        Text(
+                            text = "Menjana laporan PDF atau CSV bagi kesemua pesakit berdaftar yang mengandungi rekod kehadiran serta status kepatuhan saringan tahunan (Chest X-Ray, ECG, Ujian Darah tahunan) berpandukan CPG KKM.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    try {
+                                        val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(java.util.Date())
+                                        val activeOfficer = viewModel.activeOfficerName.value
+                                        val pdfFile = ExportHelper.generateComplianceReportPdf(
+                                            context = context,
+                                            clinicName = settings.clinicName,
+                                            patients = allPatients,
+                                            todayStr = todayStr,
+                                            officerName = activeOfficer
+                                        )
+                                        ExportHelper.shareFile(
+                                            context = context,
+                                            file = pdfFile,
+                                            mimeType = "application/pdf",
+                                            title = "Laporan Saringan & Kehadiran KKM (PDF)"
+                                        )
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Gagal menjana PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.weight(1f).testTag("export_compliance_pdf_btn"),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                            ) {
+                                Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Jana PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    try {
+                                        val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(java.util.Date())
+                                        val activeOfficer = viewModel.activeOfficerName.value
+                                        val csvStr = ExportHelper.generateComplianceReportCsv(
+                                            clinicName = settings.clinicName,
+                                            patients = allPatients,
+                                            todayStr = todayStr,
+                                            officerName = activeOfficer
+                                        )
+                                        val exportDir = java.io.File(context.cacheDir, "exports").apply { mkdirs() }
+                                        val csvFile = java.io.File(exportDir, "Laporan_Saringan_Kepatuhan_${settings.clinicName.replace(" ", "_")}.csv")
+                                        java.io.FileOutputStream(csvFile).use { fos ->
+                                            fos.write(csvStr.toByteArray(Charsets.UTF_8))
+                                        }
+                                        ExportHelper.shareFile(
+                                            context = context,
+                                            file = csvFile,
+                                            mimeType = "text/csv",
+                                            title = "Laporan Saringan & Kehadiran KKM (CSV)"
+                                        )
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Gagal menjana CSV: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.weight(1f).testTag("export_compliance_csv_btn"),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                            ) {
+                                Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Jana CSV", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    } else {
+                        // Restricted Access View for Pharmacist or Doctors
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = "Sekatan Akses: Laporan pematuhan saringan tahunan dan saringan pending ini hanya boleh diakses oleh peranan Penolong Pegawai Perubatan (AMO) atau Pentadbir Klinik sahaja.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // NKMA Metrics Summary List
         item {
             Card(

@@ -85,6 +85,11 @@ fun ClinicSetupScreen(
     var totalStockLitersText by remember(currentSettings) { mutableStateOf((currentSettings?.initialStockLiters ?: 5.0).toString()) }
     var strengthText by remember(currentSettings) { mutableStateOf(currentSettings?.initialStrength ?: "5 MG / 1 ML") }
     var backupPath by remember(currentSettings) { mutableStateOf(currentSettings?.autoBackupPath ?: "/sdcard/eMethadone_Backup") }
+    var ndmaRegNo by remember(currentSettings) { mutableStateOf(currentSettings?.ndmaRegNo ?: "NDMA-KPM-9281A") }
+    var ndmaStatus by remember(currentSettings) { mutableStateOf(currentSettings?.ndmaStatus ?: "Berdaftar / Aktif") }
+
+    val userRole by viewModel.userRole.collectAsStateWithLifecycle()
+    val isAdmin = userRole == com.example.data.model.UserRoles.ADMIN
 
     val active = activeCountText.toIntOrNull() ?: 0
     val newCases = newCasesText.toIntOrNull() ?: 0
@@ -230,6 +235,32 @@ fun ClinicSetupScreen(
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp)
                     )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Pendaftaran NDMA (National Drugs Malaysia Association)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = ndmaRegNo,
+                            onValueChange = { ndmaRegNo = it },
+                            label = { Text("No. Pendaftaran NDMA") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("setup_ndma_reg_no"),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        OutlinedTextField(
+                            value = ndmaStatus,
+                            onValueChange = { ndmaStatus = it },
+                            label = { Text("Status NDMA") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("setup_ndma_status"),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
                 }
             }
 
@@ -491,6 +522,10 @@ fun ClinicSetupScreen(
             // Save & Proceed Button
             Button(
                 onClick = {
+                    if (!isAdmin) {
+                        Toast.makeText(context, "Akses Terhad: Hanya Pentadbir (Admin) yang dibenarkan menukar tetapan!", Toast.LENGTH_LONG).show()
+                        return@Button
+                    }
                     val stockLiters = totalStockLitersText.toDoubleOrNull() ?: 5.0
                     viewModel.saveClinicSetup(
                         clinicName = clinicName,
@@ -506,6 +541,8 @@ fun ClinicSetupScreen(
                         initialExpiryDate = expiryDateText,
                         initialStockLiters = stockLiters,
                         initialStrength = strengthText,
+                        ndmaRegNo = ndmaRegNo,
+                        ndmaStatus = ndmaStatus,
                         autoBackupPath = backupPath,
                         onComplete = { success, msg ->
                             if (success) {

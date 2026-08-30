@@ -1,6 +1,10 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +39,12 @@ import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -49,6 +59,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -92,6 +105,7 @@ fun AttendanceScreen(
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     val activeOfficer by viewModel.activeOfficerName.collectAsStateWithLifecycle()
+    val userRole by viewModel.userRole.collectAsStateWithLifecycle()
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("SEMUA") } // SEMUA, HADIR, BELUM_HADIR, DOT, TAKE_HOME
@@ -210,6 +224,38 @@ fun AttendanceScreen(
                     }
                 }
             }
+        }
+
+        // Offline queue widget
+        item {
+            OfflineQueueWidget(viewModel = viewModel)
+        }
+
+        // Clinical follow up widget
+        item {
+            ClinicalFollowUpWidget(
+                viewModel = viewModel,
+                patients = patients,
+                userRole = userRole,
+                onPatientClick = onPatientClick
+            )
+        }
+
+        // Daily attendance chart
+        item {
+            DailyAttendanceChart(
+                attended = summary.attendedCount,
+                total = summary.totalRegistered,
+                missed = summary.missedCount
+            )
+        }
+
+        // Smart notifications widget
+        item {
+            SmartNotificationWidget(
+                patients = patients,
+                recordsByPatientId = recordsByPatientId
+            )
         }
 
         // 4 Summary Metrics Cards
@@ -603,5 +649,504 @@ private fun changeDateByDays(dateStr: String, days: Int): String {
         sdf.format(cal.time)
     } catch (e: Exception) {
         dateStr
+    }
+}
+
+@Composable
+fun DailyAttendanceChart(attended: Int, total: Int, missed: Int) {
+    val completedPercentage = if (total > 0) (attended * 100) / total else 0
+    val missedPercentage = if (total > 0) (missed * 100) / total else 0
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Statistik Visual Kehadiran Harian",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Circular Canvas Chart
+                Canvas(modifier = Modifier.size(80.dp)) {
+                    val strokeWidth = 14f
+                    val radius = (size.minDimension - strokeWidth) / 2
+                    val center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
+                    
+                    // Draw Gray background ring
+                    drawCircle(
+                        color = Color.LightGray.copy(alpha = 0.3f),
+                        radius = radius,
+                        center = center,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+                    )
+
+                    // Draw Attended arc (Green)
+                    val sweepAngleAttended = if (total > 0) (attended.toFloat() / total.toFloat()) * 360f else 0f
+                    drawArc(
+                        color = Color(0xFF10B981), // Emerald Green
+                        startAngle = -90f,
+                        sweepAngle = sweepAngleAttended,
+                        useCenter = false,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = strokeWidth,
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round
+                        )
+                    )
+
+                    // Draw Missed arc (Red)
+                    if (missed > 0) {
+                        val sweepAngleMissed = (missed.toFloat() / total.toFloat()) * 360f
+                        drawArc(
+                            color = Color(0xFFEF4444), // Crimson Red
+                            startAngle = -90f + sweepAngleAttended,
+                            sweepAngle = sweepAngleMissed,
+                            useCenter = false,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                width = strokeWidth,
+                                cap = androidx.compose.ui.graphics.StrokeCap.Round
+                            )
+                        )
+                    }
+                }
+
+                // Legend and Details
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(10.dp).background(Color(0xFF10B981), CircleShape))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Selesai (Hadir)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                        }
+                        Text("$completedPercentage%", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFF047857))
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(10.dp).background(Color(0xFFEF4444), CircleShape))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Belum Hadir (Cicir)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                        }
+                        Text("$missedPercentage%", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFFB91C1C))
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Kehadiran: $attended dari $total pesakit berdaftar.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun OfflineQueueWidget(viewModel: MethadoneViewModel) {
+    val isOffline by viewModel.isOfflineMode.collectAsStateWithLifecycle()
+    val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
+    val unsyncedCount = remember(allRecords) { allRecords.count { !it.isSynced } }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOffline) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isOffline) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (isOffline) Icons.Default.CloudOff else Icons.Default.CloudQueue,
+                        contentDescription = null,
+                        tint = if (isOffline) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Sistem Luar Talian (Offline Queue)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Switch(
+                    checked = isOffline,
+                    onCheckedChange = { viewModel.toggleOfflineMode(it) },
+                    modifier = Modifier.testTag("offline_mode_toggle_switch")
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            if (isOffline) {
+                Text(
+                    text = "Aplikasi berada dalam mod LUAR TALIAN. Semua imbasan QR kehadiran disimpan secara tempatan ke pangkalan data Room dan diletakkan dalam baris gilir (Queue).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            } else {
+                Text(
+                    text = "Aplikasi berada dalam mod DALAM TALIAN. Data disegerakkan terus ke server KKM.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+
+            if (unsyncedCount > 0) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(MaterialTheme.colorScheme.error, CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "$unsyncedCount imbasan belum disegerakkan",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    TextButton(
+                        onClick = {
+                            viewModel.syncDatabase { success, message ->
+                                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.testTag("sync_offline_queue_button")
+                    ) {
+                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Segerakkan Sekarang", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ClinicalFollowUpWidget(
+    viewModel: MethadoneViewModel,
+    patients: List<Patient>,
+    userRole: String,
+    onPatientClick: (Patient) -> Unit
+) {
+    // Show clinical alerts for Doctor, Farmasi or Admin
+    if (userRole != com.example.data.model.UserRoles.DOCTOR &&
+        userRole != com.example.data.model.UserRoles.PHARMACY &&
+        userRole != com.example.data.model.UserRoles.ADMIN) {
+        return
+    }
+
+    val overduePatients = remember(patients) {
+        patients.filter { it.isXRayOverdue() || it.isEcgOverdue() || it.isBloodTestOverdue() }
+    }
+    val pendingDosePatients = remember(patients) {
+        patients.filter { it.pendingDoseIncreaseRequestMg != null }
+    }
+
+    val totalAlerts = overduePatients.size + pendingDosePatients.size
+    if (totalAlerts == 0) return
+
+    var isExpanded by remember { mutableStateOf(false) }
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = StatusAmberContainer),
+        border = BorderStroke(1.dp, StatusAmber),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clickable { isExpanded = !isExpanded }
+            .testTag("clinical_followup_summary_card")
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.MedicalServices,
+                        contentDescription = null,
+                        tint = Color(0xFF92400E)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Tindakan Susulan Klinikal",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF92400E)
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color(0xFFF59E0B))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "$totalAlerts Kes",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Terdapat $totalAlerts perkara klinikal penting yang memerlukan tindakan segera Pegawai Perubatan atau Farmasi.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFB45309)
+            )
+
+            if (isExpanded) {
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = Color(0xFFF59E0B).copy(alpha = 0.3f))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Dosage Increase requests section
+                if (pendingDosePatients.isNotEmpty()) {
+                    Text(
+                        text = "Permohonan Peningkatan Dos (${pendingDosePatients.size} kes)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF92400E)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    pendingDosePatients.forEach { pat ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onPatientClick(pat) }
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "• ${pat.name} (Syor: ${pat.pendingDoseIncreaseRequestMg?.toInt()}mg)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF0F172A)
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowForwardIos,
+                                contentDescription = null,
+                                tint = Color(0xFF92400E),
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // Overdue Screening section
+                if (overduePatients.isNotEmpty()) {
+                    Text(
+                        text = "Saringan / ECG Terlepas (${overduePatients.size} pesakit)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF92400E)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    overduePatients.forEach { pat ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onPatientClick(pat) }
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val items = mutableListOf<String>()
+                            if (pat.isXRayOverdue()) items.add("X-Ray")
+                            if (pat.isEcgOverdue()) items.add("ECG")
+                            if (pat.isBloodTestOverdue()) items.add("Ujian Darah")
+                            
+                            Text(
+                                text = "• ${pat.name} (Ralat: ${items.joinToString(", ")})",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF0F172A)
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowForwardIos,
+                                contentDescription = null,
+                                tint = Color(0xFF92400E),
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
+                }
+            } else {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Klik untuk lihat senarai terperinci...",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFFD97706),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SmartNotificationWidget(
+    patients: List<Patient>,
+    recordsByPatientId: Map<String, DispenseRecord>
+) {
+    val calendar = Calendar.getInstance()
+    val hour = calendar.get(Calendar.HOUR_OF_DAY)
+
+    // Compute missing check-ins
+    val notCheckedInPatients = remember(patients, recordsByPatientId) {
+        patients.filter { !recordsByPatientId.containsKey(it.patientId) && it.status == "AKTIF" }
+    }
+
+    if (notCheckedInPatients.isEmpty()) return
+
+    // Show warning if it is late in the day (e.g. after 11:00 AM or 12:00 PM)
+    val checkInTimeLimitHour = 12
+    val isAfterLimit = hour >= checkInTimeLimitHour
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = if (isAfterLimit) StatusRedContainer else MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, if (isAfterLimit) StatusRed else MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (isAfterLimit) Icons.Default.NotificationsActive else Icons.Default.Notifications,
+                        contentDescription = null,
+                        tint = if (isAfterLimit) StatusRed else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Sistem Amaran Kehadiran KKM",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isAfterLimit) Color(0xFF991B1B) else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isAfterLimit) Color(0xFFEF4444) else MaterialTheme.colorScheme.secondaryContainer)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = if (isAfterLimit) "AMARAN LEWAT" else "PERINGATAN",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isAfterLimit) Color.White else MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontSize = 9.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            if (isAfterLimit) {
+                Text(
+                    text = "AMARAN: Jam sudah melepasi jam ${checkInTimeLimitHour}:00 PM. Seramai ${notCheckedInPatients.size} pesakit berisiko CICIR dos rawatan harian sekiranya tidak hadir hari ini.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF991B1B),
+                    fontWeight = FontWeight.SemiBold
+                )
+            } else {
+                Text(
+                    text = "Peringatan jadual harian: ${notCheckedInPatients.size} pesakit dijadualkan menerima metadon hari ini namun masih belum mendaftar masuk.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(notCheckedInPatients.take(5)) { pat ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isAfterLimit) Color(0xFFFEE2E2) else MaterialTheme.colorScheme.surfaceVariant)
+                            .border(1.dp, if (isAfterLimit) Color(0xFFFECACA) else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Column {
+                            Text(
+                                text = pat.name,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isAfterLimit) Color(0xFF991B1B) else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = "Dos: ${pat.currentDoseMg.toInt()}mg • ${pat.phoneNumber}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                fontSize = 9.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -21,6 +21,8 @@ data class ClinicSettings(
     val initialExpiryDate: String = "2027-12-31",
     val initialStockLiters: Double = 5.0,
     val initialStrength: String = "5 mg / 1 ml",
+    val ndmaRegNo: String = "NDMA-KPM-9281A",
+    val ndmaStatus: String = "Berdaftar / Aktif",
     val autoBackupPath: String = "/sdcard/eMethadone_Backup",
     val lastBackupDate: String? = null
 )

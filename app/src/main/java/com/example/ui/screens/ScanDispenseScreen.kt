@@ -303,6 +303,90 @@ fun ScanDispenseScreen(
                         }
                     }
 
+                    // Sejarah Imbasan QR Terkini
+                    val scanHistory by viewModel.scanHistory.collectAsStateWithLifecycle()
+                    if (scanHistory.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Sejarah Imbasan Terkini:",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Text(
+                                text = "Sentuh untuk semak semula",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.testTag("scan_history_list")
+                        ) {
+                            items(scanHistory, key = { it.id }) { entry ->
+                                Card(
+                                    onClick = {
+                                        viewModel.processScannedQr(entry.patientId, "SEJARAH_IMBASAN")
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = when {
+                                            entry.status.contains("Sedia") || entry.status.contains("Hadir") -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                                            entry.status.contains("Sudah") -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
+                                            else -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                                        }
+                                    ),
+                                    modifier = Modifier.testTag("scan_history_item_${entry.id}")
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(6.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        when {
+                                                            entry.status.contains("Sedia") || entry.status.contains("Hadir") -> StatusGreen
+                                                            entry.status.contains("Sudah") -> StatusAmber
+                                                            else -> StatusRed
+                                                        }
+                                                    )
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = entry.timestamp,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = entry.patientName,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                        Text(
+                                            text = "${entry.patientId} • ${entry.status}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(12.dp))
 
                     // Quick Demo Simulator Chips (Tap to simulate QR scan of any registered patient)
@@ -669,15 +753,21 @@ fun DispenseConfirmationSheet(
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            text = "Bilangan Botol Bawa Balik: $bottlesCount hari ($bottlesCount botol)",
+                            text = "Bilangan Botol Bawa Balik: ${bottlesCount.coerceAtMost(6)} hari (${bottlesCount.coerceAtMost(6)} botol)",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold
                         )
+                        Text(
+                            text = "Had Maksimum Bekalan Bawa Balik (Take-Home): 6 botol sahaja mengikut CPG KKM.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Medium
+                        )
                         Slider(
-                            value = bottlesCount.toFloat(),
-                            onValueChange = { bottlesCount = it.toInt() },
-                            valueRange = 1f..7f,
-                            steps = 5,
+                            value = bottlesCount.coerceAtMost(6).toFloat(),
+                            onValueChange = { bottlesCount = it.toInt().coerceAtMost(6) },
+                            valueRange = 1f..6f,
+                            steps = 4,
                             modifier = Modifier.testTag("bottles_slider")
                         )
                         Row(

@@ -4,6 +4,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.ui.draw.rotate
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CloudQueue
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -150,6 +161,8 @@ fun MainAppScreen(
     val isLowStockAlert by viewModel.isLowStockAlert.collectAsStateWithLifecycle()
     val missedDoseAlerts by viewModel.missedDoseAlerts.collectAsStateWithLifecycle()
     val clinicSettings by viewModel.clinicSettings.collectAsStateWithLifecycle()
+    val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     val clinicDisplayName = clinicSettings?.clinicName ?: "e-Methadone PKD Kluang"
 
@@ -174,12 +187,48 @@ fun MainAppScreen(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Text(
-                                text = "e-Methadone QR",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "e-Methadone QR",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+
+                                val infiniteTransition = rememberInfiniteTransition(label = "sync_rotation")
+                                val rotationAngle by infiniteTransition.animateFloat(
+                                    initialValue = 0f,
+                                    targetValue = 360f,
+                                    animationSpec = infiniteRepeatable(
+                                        animation = tween(1200, easing = LinearEasing),
+                                        repeatMode = RepeatMode.Restart
+                                    ),
+                                    label = "rotation"
+                                )
+
+                                val (syncIcon, syncColor, syncDesc) = when (syncStatus) {
+                                    com.example.ui.viewmodel.SyncStatus.SYNCHRONIZED -> Triple(Icons.Default.CloudDone, Color(0xFF2E7D32), "Selesai Disinkronkan")
+                                    com.example.ui.viewmodel.SyncStatus.SYNCING -> Triple(Icons.Default.Sync, MaterialTheme.colorScheme.primary, "Sedang Disinkronkan")
+                                    com.example.ui.viewmodel.SyncStatus.OFFLINE -> Triple(Icons.Default.CloudOff, Color.Gray, "Mod Luar Talian")
+                                    com.example.ui.viewmodel.SyncStatus.ERROR -> Triple(Icons.Default.CloudQueue, Color.Red, "Ralat Sinkronisasi")
+                                }
+
+                                Icon(
+                                    imageVector = syncIcon,
+                                    contentDescription = syncDesc,
+                                    tint = syncColor,
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .rotate(if (syncStatus == com.example.ui.viewmodel.SyncStatus.SYNCING) rotationAngle else 0f)
+                                        .testTag("sync_status_icon")
+                                        .clickable {
+                                            viewModel.syncDatabase { success, message ->
+                                                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                )
+                            }
                             Text(
                                 text = clinicDisplayName,
                                 style = MaterialTheme.typography.labelSmall,
