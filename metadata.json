@@ -1,0 +1,8 @@
+{
+  "name": "e-Methadone QR",
+  "description": "Aplikasi pengurusan rekod kedatangan harian pesakit terapi gantian methadone dan dispensasi ubat berasaskan pengimbasan kod QR pantas.",
+  "requestFramePermissions": [
+    "android.permission.CAMERA"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
