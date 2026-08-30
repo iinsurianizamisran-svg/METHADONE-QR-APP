@@ -206,12 +206,28 @@ class MethadoneViewModel(application: Application) : AndroidViewModel(applicatio
                     fos.write(sb.toString().toByteArray(Charsets.UTF_8))
                 }
 
+                // Also generate the Google Sheet formatted backup CSV inside backups folder
+                val googleSheetBackupFile = File(backupDir, "eMethadone_GoogleSheet_Backup_${timestamp}.csv")
+                try {
+                    val tempGoogleSheetFile = com.example.util.ExportHelper.generateGoogleSheetBackup(
+                        context = context,
+                        patients = allPatientList,
+                        dispenseRecords = records,
+                        clinicName = currentConfig.clinicName
+                    )
+                    tempGoogleSheetFile.copyTo(googleSheetBackupFile, overwrite = true)
+                } catch (e: Exception) {
+                    // Non-blocking log if google sheet backup copying fails
+                    e.printStackTrace()
+                }
+
                 val updatedSettings = currentConfig.copy(
-                    lastBackupDate = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+                    lastBackupDate = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
+                    autoBackupPath = backupDir.absolutePath
                 )
                 repository.saveClinicSettings(updatedSettings)
 
-                onResult(true, "Auto Backup Berjaya!\nLokasi: ${backupFile.absolutePath}")
+                onResult(true, "Auto Backup Berjaya!\nDatabase: ${backupFile.name}\nGoogle Sheet: ${googleSheetBackupFile.name}")
             } catch (e: Exception) {
                 onResult(false, "Ralat Auto Backup: ${e.message}")
             }

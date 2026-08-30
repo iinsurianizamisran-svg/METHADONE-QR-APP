@@ -246,7 +246,7 @@ fun AttendanceScreen(
             DailyAttendanceChart(
                 attended = summary.attendedCount,
                 total = summary.totalRegistered,
-                missed = summary.missedCount
+                missed = summary.pendingCount
             )
         }
 

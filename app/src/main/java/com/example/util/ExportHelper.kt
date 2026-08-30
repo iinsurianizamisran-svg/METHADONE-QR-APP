@@ -729,4 +729,131 @@ object ExportHelper {
 
         return file
     }
+
+    /**
+     * Generates a Google Sheet compatible CSV report for Daily Attendance, Dispensing, and Patient Categories.
+     */
+    fun generateGoogleSheetBackup(
+        context: Context,
+        patients: List<Patient>,
+        dispenseRecords: List<DispenseRecord>,
+        clinicName: String
+    ): File {
+        val sdfDateTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val sdfDateOnly = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val currentDateTime = sdfDateTime.format(Date())
+        val currentDateOnly = sdfDateOnly.format(Date())
+
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        // Google Sheet compatible name containing date/time
+        val fileName = "eMethadone_GoogleSheet_Backup_${timestamp}.csv"
+        val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
+        val file = File(exportDir, fileName)
+
+        val sb = StringBuilder()
+        sb.append("\uFEFF") // UTF-8 BOM for Microsoft Excel / Google Sheets compatibility
+
+        // Metadata headers
+        sb.appendLine("KLINIK / PKD,${escapeCsv(clinicName)}")
+        sb.appendLine("TARIKH JANAAN LAPORAN (CURRENT DATETIME),${escapeCsv(currentDateTime)}")
+        sb.appendLine("TARIKH RAWATAN (TREATMENT DATE),${escapeCsv(currentDateOnly)}")
+        sb.appendLine() // blank line for spacing
+
+        // CSV Table Headers
+        sb.appendLine("No.,ID Pesakit,Nama Pesakit,No. KP,Status Kehadiran,Kategori Rawatan (Miss Dose / DOT / DBB),Dos Diberikan (mg),Dos Taper Up (Dose Increase Status),Botol Bawa Balik (Bottle Provided),Masa Ambil (Time),Tarikh Temujanji Seterusnya (Next Appointment / Expected Return for DOT & DBB)")
+
+        // Process each patient
+        patients.forEachIndexed { idx, patient ->
+            // Check if patient had dispensing record for today
+            val todayRecord = dispenseRecords.find { 
+                it.patientId == patient.patientId && it.dispenseDate == currentDateOnly 
+            }
+
+            val isAttended = todayRecord != null
+            val attendanceStatus = if (isAttended) "Hadir" else "Cicir Dos (Miss Dose)"
+
+            // Kategori Rawatan: Miss Dose, DOT, DBB (Take Home)
+            val treatmentCategory = if (!isAttended) {
+                "Miss Dose"
+            } else {
+                if (todayRecord?.dispenseType == "TAKE_HOME") "DBB" else "DOT"
+            }
+
+            // Dose given (doseMg)
+            val doseGiven = if (isAttended) todayRecord?.doseMg ?: 0.0 else 0.0
+
+            // Dos Taper Up status: check if patient has a pending dose increase, or check notes/pending increase
+            val pendingIncrease = patient.pendingDoseIncreaseRequestMg
+            val taperUpStatus = if (pendingIncrease != null && pendingIncrease > 0) {
+                "Ya (+${String.format(Locale.US, "%.1f", pendingIncrease - patient.currentDoseMg)}mg)"
+            } else {
+                "Tiada"
+            }
+
+            // Bottle provided
+            val bottlesProvided = if (isAttended && todayRecord?.dispenseType == "TAKE_HOME") {
+                todayRecord.takeHomeBottlesCount
+            } else {
+                0
+            }
+
+            // Time of dispense
+            val dispenseTime = if (isAttended) todayRecord?.dispenseTime ?: "-" else "-"
+
+            // Next appointment date calculation
+            val nextAppointmentDate: String = if (!isAttended) {
+                "Kadar Segera (ASAP)"
+            } else {
+                if (todayRecord?.dispenseType == "TAKE_HOME") {
+                    // If DBB with Bottle Given: expected date patient should came for DOT and Take DBB
+                    val bottles = todayRecord.takeHomeBottlesCount
+                    try {
+                        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                        val todayDateObj = sdf.parse(currentDateOnly) ?: Date()
+                        val calendar = java.util.Calendar.getInstance()
+                        calendar.time = todayDateObj
+                        // Add bottles count (number of take-home days) + 1 day
+                        calendar.add(java.util.Calendar.DAY_OF_YEAR, bottles + 1)
+                        sdf.format(calendar.time) + " (Sila datang DOT & Ambil DBB)"
+                    } catch (e: Exception) {
+                        "Susulan ${bottles + 1} hari"
+                    }
+                } else {
+                    // Appointment next day if DOT
+                    try {
+                        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                        val todayDateObj = sdf.parse(currentDateOnly) ?: Date()
+                        val calendar = java.util.Calendar.getInstance()
+                        calendar.time = todayDateObj
+                        calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
+                        sdf.format(calendar.time) + " (Sila datang DOT esok)"
+                    } catch (e: Exception) {
+                        "Susulan Esok"
+                    }
+                }
+            }
+
+            val row = listOf(
+                (idx + 1).toString(),
+                escapeCsv(patient.patientId),
+                escapeCsv(patient.name),
+                escapeCsv(patient.icNumber),
+                escapeCsv(attendanceStatus),
+                escapeCsv(treatmentCategory),
+                String.format(Locale.US, "%.1f", doseGiven),
+                escapeCsv(taperUpStatus),
+                bottlesProvided.toString(),
+                escapeCsv(dispenseTime),
+                escapeCsv(nextAppointmentDate)
+            )
+
+            sb.appendLine(row.joinToString(","))
+        }
+
+        FileOutputStream(file).use { out ->
+            out.write(sb.toString().toByteArray(Charsets.UTF_8))
+        }
+
+        return file
+    }
 }

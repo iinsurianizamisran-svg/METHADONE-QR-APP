@@ -648,6 +648,41 @@ fun NkmaMonthlyReportView(
                         }
                     }
 
+                    Button(
+                        onClick = {
+                            try {
+                                val googleSheetFile = ExportHelper.generateGoogleSheetBackup(
+                                    context = context,
+                                    patients = allPatients,
+                                    dispenseRecords = allRecords,
+                                    clinicName = settings.clinicName
+                                )
+                                ExportHelper.shareFile(
+                                    context = context,
+                                    file = googleSheetFile,
+                                    mimeType = "text/csv",
+                                    title = "Penyata Harian Format Google Sheet"
+                                )
+                                // Also trigger background backup to update time
+                                viewModel.triggerAutoBackup(context) { _, _ -> }
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Gagal menjana Google Sheet: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("export_google_sheet_btn"),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        contentPadding = PaddingValues(vertical = 10.dp)
+                    ) {
+                        Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Jana & Kongsi Penyata Format Google Sheet", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+
                     if (settings.lastBackupDate != null) {
                         Text(
                             text = "Backup Terakhir: ${settings.lastBackupDate} (Lokasi: ${settings.autoBackupPath})",
